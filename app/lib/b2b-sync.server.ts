@@ -2,6 +2,9 @@ const B2B_TAG = "B2B";
 const MOQ_NAMESPACE = "custom";
 const MOQ_KEY = "moq";
 const MOQ_VALUE = "10";
+const B2B_FLAG_NAMESPACE = "custom";
+const B2B_FLAG_KEY = "is-b2b";
+const B2B_FLAG_VALUE = "true";
 import {
   inspectCatalogChanges,
   saveCatalogSnapshot,
@@ -57,6 +60,7 @@ type SyncProduct = {
   metafields: { nodes: Metafield[] };
   sourceUpdatedAt: { value: string } | null;
   minimumOrderQuantity: { value: string } | null;
+  isB2B: { value: string } | null;
 };
 
 type Publication = {
@@ -68,6 +72,7 @@ export type B2BSyncResult = {
   checked: number;
   updated: number;
   drafted: number;
+  flagged: number;
   unchanged: number;
   added: string[];
   changed: string[];
@@ -212,6 +217,9 @@ async function loadCatalog(admin: AdminClient) {
                 value
               }
               minimumOrderQuantity: metafield(namespace: "custom", key: "moq") {
+                value
+              }
+              isB2B: metafield(namespace: "custom", key: "is-b2b") {
                 value
               }
             }
@@ -367,7 +375,11 @@ async function syncMetafields(
     .filter(
       (metafield) =>
         metafield.namespace === "custom" &&
-        !(metafield.namespace === MOQ_NAMESPACE && metafield.key === MOQ_KEY),
+        !(
+          (metafield.namespace === MOQ_NAMESPACE && metafield.key === MOQ_KEY) ||
+          (metafield.namespace === B2B_FLAG_NAMESPACE &&
+            metafield.key === B2B_FLAG_KEY)
+        ),
     )
     .map((metafield) => ({
       ownerId: target.id,
@@ -417,10 +429,51 @@ async function syncMetafields(
           type: "number_integer",
           value: MOQ_VALUE,
         },
+        {
+          ownerId: target.id,
+          namespace: B2B_FLAG_NAMESPACE,
+          key: B2B_FLAG_KEY,
+          type: "boolean",
+          value: B2B_FLAG_VALUE,
+        },
       ],
     },
   );
   assertNoErrors("Metafelder aktualisieren", data.metafieldsSet.userErrors);
+}
+
+async function setB2BFlag(admin: AdminClient, productId: string) {
+  const data = await graphql<{
+    metafieldsSet: { userErrors: UserError[] };
+  }>(
+    admin,
+    `#graphql
+      mutation B2BSetFlag($metafields: [MetafieldsSetInput!]!) {
+        metafieldsSet(metafields: $metafields) {
+          metafields {
+            id
+            jsonValue
+          }
+          userErrors {
+            field
+            message
+          }
+        }
+      }
+    `,
+    {
+      metafields: [
+        {
+          ownerId: productId,
+          namespace: B2B_FLAG_NAMESPACE,
+          key: B2B_FLAG_KEY,
+          type: "boolean",
+          value: B2B_FLAG_VALUE,
+        },
+      ],
+    },
+  );
+  assertNoErrors("B2B-Schalter setzen", data.metafieldsSet.userErrors);
 }
 
 async function syncImages(
@@ -644,7 +697,14 @@ export async function syncAllB2BBundles(
   const relevantChange = [...memory.added, ...memory.changed].some(
     (product) =>
       Boolean(priceFor(product.productType)) ||
+      isDealerAccessory(product.productType) ||
       product.tags.some((tag) => normalize(tag) === normalize(B2B_TAG)),
+  );
+  const missingB2BFlag = memory.current.some(
+    (product) =>
+      (isDealerAccessory(product.productType) ||
+        product.tags.some((tag) => normalize(tag) === normalize(B2B_TAG))) &&
+      product.isB2B?.value !== B2B_FLAG_VALUE,
   );
   const relevantDeletion = memory.deleted.some((product) =>
     Boolean(priceFor(product.productType)),
@@ -656,12 +716,18 @@ export async function syncAllB2BBundles(
       !product.title.endsWith(" B2B"),
   ).length;
 
-  if (memory.initialized && !relevantChange && !relevantDeletion) {
+  if (
+    memory.initialized &&
+    !relevantChange &&
+    !relevantDeletion &&
+    !missingB2BFlag
+  ) {
     await saveCatalogSnapshot(shop, memory.current);
     return {
       checked: sourceCount,
       updated: 0,
       drafted: 0,
+      flagged: 0,
       unchanged: sourceCount,
       added: memory.added.map((product) => product.title),
       changed: memory.changed.map((product) => product.title),
@@ -694,6 +760,7 @@ export async function syncAllB2BBundles(
     checked: sources.length,
     updated: 0,
     drafted: 0,
+    flagged: 0,
     unchanged: 0,
     added: memory.added.map((product) => product.title),
     changed: memory.changed.map((product) => product.title),
@@ -703,6 +770,23 @@ export async function syncAllB2BBundles(
     missing: [],
     failed: [],
   };
+
+  for (const product of products.filter(
+    (item) =>
+      (isDealerAccessory(item.productType) ||
+        item.tags.some((tag) => normalize(tag) === normalize(B2B_TAG))) &&
+      item.isB2B?.value !== B2B_FLAG_VALUE,
+  )) {
+    try {
+      await setB2BFlag(admin, product.id);
+      result.flagged += 1;
+    } catch (error) {
+      result.failed.push({
+        title: product.title,
+        message: error instanceof Error ? error.message : "Unbekannter Fehler",
+      });
+    }
+  }
 
   for (const deletedSource of memory.deleted.filter((product) =>
     Boolean(priceFor(product.productType)),
@@ -760,18 +844,24 @@ export async function syncAllB2BBundles(
       nodes: Array<{
         title: string;
         productType: string;
+        tags: string[];
         minimumOrderQuantity: { jsonValue: number } | null;
+        isB2B: { jsonValue: boolean } | null;
       }>;
     };
   }>(
     admin,
     `#graphql
-      query B2BVerifyMinimumOrderQuantities {
-        products(first: 250, query: "tag:B2B") {
+      query B2BVerifyMetadata {
+        products(first: 250) {
           nodes {
             title
             productType
+            tags
             minimumOrderQuantity: metafield(namespace: "custom", key: "moq") {
+              jsonValue
+            }
+            isB2B: metafield(namespace: "custom", key: "is-b2b") {
               jsonValue
             }
           }
@@ -782,12 +872,27 @@ export async function syncAllB2BBundles(
   const invalidMoq = verification.products.nodes.filter(
     (product) =>
       priceFor(product.productType) &&
+      product.tags.some((tag) => normalize(tag) === normalize(B2B_TAG)) &&
       product.minimumOrderQuantity?.jsonValue !== 10,
   );
   if (invalidMoq.length) {
     result.failed.push({
       title: "Mindestbestellmenge",
       message: `MOQ ist nicht 10 bei: ${invalidMoq.map((product) => product.title).join(", ")}`,
+    });
+  }
+  const invalidB2BFlag = verification.products.nodes.filter(
+    (product) =>
+      (isDealerAccessory(product.productType) ||
+        product.tags.some((tag) => normalize(tag) === normalize(B2B_TAG))) &&
+      product.isB2B?.jsonValue !== true,
+  );
+  if (invalidB2BFlag.length) {
+    result.failed.push({
+      title: "B2B-Schalter",
+      message: `„ist B2B“ ist nicht aktiv bei: ${invalidB2BFlag
+        .map((product) => product.title)
+        .join(", ")}`,
     });
   }
 

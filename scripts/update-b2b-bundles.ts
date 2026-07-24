@@ -66,6 +66,7 @@ const result = await syncAllB2BBundles(admin, store);
 console.log(`Geprüft: ${result.checked}`);
 console.log(`Aktualisiert: ${result.updated}`);
 console.log(`Auf Entwurf gesetzt: ${result.drafted}`);
+console.log(`Als B2B markiert: ${result.flagged}`);
 console.log(`Unverändert: ${result.unchanged}`);
 console.log(
   `Katalog: ${result.added.length} neu, ${result.changed.length} geändert, ${result.deleted.length} gelöscht`,

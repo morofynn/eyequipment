@@ -15,6 +15,7 @@ export type CatalogProductMemory = {
   tags: string[];
   createdAt: string;
   updatedAt: string;
+  isB2B: { value: string } | null;
 };
 
 export type CatalogChanges = {
@@ -82,6 +83,9 @@ export async function inspectCatalogChanges(
               tags
               createdAt
               updatedAt
+              isB2B: metafield(namespace: "custom", key: "is-b2b") {
+                value
+              }
             }
             pageInfo {
               hasNextPage
@@ -111,7 +115,8 @@ export async function inspectCatalogChanges(
       (saved.title !== product.title ||
         saved.productType !== product.productType ||
         JSON.stringify(savedTags) !== JSON.stringify(currentTags) ||
-        saved.updatedAt !== product.updatedAt)
+        saved.updatedAt !== product.updatedAt ||
+        saved.isB2B?.value !== product.isB2B?.value)
     );
   });
   const deleted = previous

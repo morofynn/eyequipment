@@ -109,6 +109,15 @@ const finalizePricesMutation = `mutation FinalizeB2BPrices(
   }
 }`;
 
+const setB2BFlagMutation = `mutation SetB2BFlag(
+  $metafields: [MetafieldsSetInput!]!
+) {
+  metafieldsSet(metafields: $metafields) {
+    metafields { id jsonValue }
+    userErrors { field message }
+  }
+}`;
+
 function execute(query, variables, allowMutations = false) {
   const args = [
     "store",
@@ -145,6 +154,28 @@ function userErrors(payload) {
     .flatMap(([name, result]) =>
       (result?.userErrors ?? []).map((error) => `${name}: ${error.message}`),
     );
+}
+
+function setB2BFlag(productId) {
+  const result = execute(
+    setB2BFlagMutation,
+    {
+      metafields: [
+        {
+          ownerId: productId,
+          namespace: "custom",
+          key: "is-b2b",
+          type: "boolean",
+          value: "true",
+        },
+      ],
+    },
+    true,
+  );
+  const errors = result.metafieldsSet.userErrors ?? [];
+  if (errors.length) {
+    throw new Error(errors.map(({ message }) => message).join("; "));
+  }
 }
 
 function publicationLabel(publication) {
@@ -211,6 +242,7 @@ for (const [index, source] of sources.entries()) {
     if (
       existing?.tags.some((tag) => tag.toLocaleLowerCase("de-DE") === "b2b")
     ) {
+      setB2BFlag(existing.id);
       summary.skipped += 1;
       console.log("already complete");
       continue;
@@ -269,6 +301,7 @@ for (const [index, source] of sources.entries()) {
     if (configurationErrors.length) {
       throw new Error(configurationErrors.join("; "));
     }
+    setB2BFlag(product.id);
 
     if (!b2bCollection.ruleSet) {
       const collectionResult = execute(

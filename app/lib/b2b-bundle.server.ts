@@ -357,6 +357,13 @@ async function markProduct(
           type: "number_integer",
           value: "10",
         },
+        {
+          ownerId: productId,
+          namespace: "custom",
+          key: "is-b2b",
+          type: "boolean",
+          value: "true",
+        },
       ],
     },
   );
@@ -622,6 +629,7 @@ async function verifyResult(admin: AdminClient, productId: string) {
       title: string;
       sourceProduct: { jsonValue: string } | null;
       minimumOrderQuantity: { jsonValue: number } | null;
+      isB2B: { jsonValue: boolean } | null;
     } | null;
   }>(
     admin,
@@ -636,6 +644,9 @@ async function verifyResult(admin: AdminClient, productId: string) {
           minimumOrderQuantity: metafield(namespace: "custom", key: "moq") {
             jsonValue
           }
+          isB2B: metafield(namespace: "custom", key: "is-b2b") {
+            jsonValue
+          }
         }
       }
     `,
@@ -643,7 +654,8 @@ async function verifyResult(admin: AdminClient, productId: string) {
   );
   if (
     !data.product?.sourceProduct ||
-    data.product.minimumOrderQuantity?.jsonValue !== 10
+    data.product.minimumOrderQuantity?.jsonValue !== 10 ||
+    data.product.isB2B?.jsonValue !== true
   ) {
     throw new Error("Die abschließende Prüfung des B2B-Produkts ist fehlgeschlagen.");
   }

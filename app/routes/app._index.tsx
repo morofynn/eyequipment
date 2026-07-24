@@ -75,7 +75,7 @@ export default function Index() {
       shopify.toast.show(
         fetcher.data.kind === "create"
           ? `${fetcher.data.result.title} wurde veröffentlicht.`
-          : `${fetcher.data.result.updated} aktualisiert, ${fetcher.data.result.drafted} auf Entwurf gesetzt.`,
+          : `${fetcher.data.result.updated} aktualisiert, ${fetcher.data.result.flagged} als B2B markiert.`,
       );
     }
   }, [fetcher.data, shopify]);
@@ -142,6 +142,7 @@ export default function Index() {
           <s-list-item>B2C-Varianten als Bundle-Komponenten verknüpfen</s-list-item>
           <s-list-item>Tag und Kollektion B2B zuweisen</s-list-item>
           <s-list-item>Mindestbestellmenge auf 10 setzen</s-list-item>
+          <s-list-item>Metafeld „ist B2B“ aktivieren</s-list-item>
           <s-list-item>
             Nur Online Store, Headless und Point of Sale aktivieren
           </s-list-item>
@@ -203,7 +204,8 @@ export default function Index() {
           <s-stack direction="block" gap="small">
             <s-text>
               Geprüft: {syncResult.checked} · Aktualisiert: {syncResult.updated} ·
-              Entwurf: {syncResult.drafted} · Unverändert: {syncResult.unchanged}
+              Als B2B markiert: {syncResult.flagged} · Entwurf:{" "}
+              {syncResult.drafted} · Unverändert: {syncResult.unchanged}
             </s-text>
             <s-text>
               Katalog: {syncResult.added.length} neu · {syncResult.changed.length} geändert ·{" "}
