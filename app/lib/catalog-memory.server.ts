@@ -16,6 +16,7 @@ export type CatalogProductMemory = {
   createdAt: string;
   updatedAt: string;
   isB2B: { value: string } | null;
+  minimumOrderQuantity: { value: string } | null;
   relatedProducts: { jsonValue: string[] } | null;
 };
 
@@ -87,6 +88,9 @@ export async function inspectCatalogChanges(
               isB2B: metafield(namespace: "custom", key: "is-b2b") {
                 value
               }
+              minimumOrderQuantity: metafield(namespace: "custom", key: "moq") {
+                value
+              }
               relatedProducts: metafield(
                 namespace: "shopyflow--recommendation"
                 key: "related_products"
@@ -124,6 +128,8 @@ export async function inspectCatalogChanges(
         JSON.stringify(savedTags) !== JSON.stringify(currentTags) ||
         saved.updatedAt !== product.updatedAt ||
         saved.isB2B?.value !== product.isB2B?.value ||
+        saved.minimumOrderQuantity?.value !==
+          product.minimumOrderQuantity?.value ||
         JSON.stringify(saved.relatedProducts?.jsonValue ?? []) !==
           JSON.stringify(product.relatedProducts?.jsonValue ?? []))
     );

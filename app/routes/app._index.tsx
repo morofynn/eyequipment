@@ -141,7 +141,9 @@ export default function Index() {
           <s-list-item>Produktdaten, Bilder, Tags und Metafelder kopieren</s-list-item>
           <s-list-item>B2C-Varianten als Bundle-Komponenten verknüpfen</s-list-item>
           <s-list-item>Tag und Kollektion B2B zuweisen</s-list-item>
-          <s-list-item>Mindestbestellmenge auf 10 setzen</s-list-item>
+          <s-list-item>
+            Mindestbestellmenge auf 5 für Tücher und 3 für Mäppchen setzen
+          </s-list-item>
           <s-list-item>Metafeld „ist B2B“ aktivieren</s-list-item>
           <s-list-item>
             Related Products mit den passenden B2B-Bundles verknüpfen

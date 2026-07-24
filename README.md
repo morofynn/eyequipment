@@ -11,7 +11,8 @@ Embedded Shopify app for creating a B2B bundle from an existing B2C product.
 - Existing product data, variants, images, tags, and metafields are duplicated
 - Every generated variant contains the matching B2C variant with quantity `1`
 - The tag `B2B` is added
-- The existing product metafield `custom.moq` is set to `10`
+- The existing product metafield `custom.moq` is set to `5` for Tücher and
+  `3` for Mäppchen
 - The existing boolean product metafield `custom.is-b2b` is set to `true`
 - The product is added to the `B2B` collection
 - The product is activated and published only to:

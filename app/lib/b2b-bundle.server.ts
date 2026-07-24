@@ -65,6 +65,15 @@ function priceFor(product: SourceProduct) {
   );
 }
 
+function minimumOrderQuantityFor(product: SourceProduct) {
+  const productType = normalize(product.productType);
+  if (["tuch", "tücher"].includes(productType)) return "5";
+  if (productType === "mäppchen") return "3";
+  throw new Error(
+    `Produkttyp „${product.productType || "nicht gesetzt"}“ hat keine konfigurierte Mindestbestellmenge.`,
+  );
+}
+
 function targetPublicationNames() {
   const configured = process.env.B2B_PUBLICATION_NAMES?.split(",")
     .map((name) => name.trim())
@@ -295,6 +304,7 @@ async function markProduct(
   productId: string,
   source: SourceProduct,
 ) {
+  const minimumOrderQuantity = minimumOrderQuantityFor(source);
   const tags = Array.from(new Set([...source.tags, B2B_TAG]));
   const updateData = await graphql<{
     productUpdate: { userErrors: UserError[] };
@@ -355,7 +365,7 @@ async function markProduct(
           namespace: "custom",
           key: "moq",
           type: "number_integer",
-          value: "10",
+          value: minimumOrderQuantity,
         },
         {
           ownerId: productId,
@@ -622,7 +632,11 @@ async function setPublications(
   return wanted.map((publication) => publicationLabel(publication.name));
 }
 
-async function verifyResult(admin: AdminClient, productId: string) {
+async function verifyResult(
+  admin: AdminClient,
+  productId: string,
+  expectedMinimumOrderQuantity: number,
+) {
   const data = await graphql<{
     product: {
       id: string;
@@ -654,7 +668,7 @@ async function verifyResult(admin: AdminClient, productId: string) {
   );
   if (
     !data.product?.sourceProduct ||
-    data.product.minimumOrderQuantity?.jsonValue !== 10 ||
+    data.product.minimumOrderQuantity?.jsonValue !== expectedMinimumOrderQuantity ||
     data.product.isB2B?.jsonValue !== true
   ) {
     throw new Error("Die abschließende Prüfung des B2B-Produkts ist fehlgeschlagen.");
@@ -692,7 +706,11 @@ export async function createB2BBundle(
     duplicate.id,
     publications,
   );
-  const verified = await verifyResult(admin, duplicate.id);
+  const verified = await verifyResult(
+    admin,
+    duplicate.id,
+    Number(minimumOrderQuantityFor(source)),
+  );
 
   return {
     productId: verified.id,

@@ -1,7 +1,6 @@
 const B2B_TAG = "B2B";
 const MOQ_NAMESPACE = "custom";
 const MOQ_KEY = "moq";
-const MOQ_VALUE = "10";
 const B2B_FLAG_NAMESPACE = "custom";
 const B2B_FLAG_KEY = "is-b2b";
 const B2B_FLAG_VALUE = "true";
@@ -96,6 +95,13 @@ function priceFor(productType: string) {
   const normalized = normalize(productType);
   if (["tuch", "tücher"].includes(normalized)) return "6.00";
   if (normalized === "mäppchen") return "5.00";
+  return null;
+}
+
+function minimumOrderQuantityFor(productType: string) {
+  const normalized = normalize(productType);
+  if (["tuch", "tücher"].includes(normalized)) return "5";
+  if (normalized === "mäppchen") return "3";
   return null;
 }
 
@@ -295,11 +301,12 @@ function componentsMatch(source: SyncProduct, target: SyncProduct) {
 }
 
 function needsSync(source: SyncProduct, target: SyncProduct, price: string) {
+  const minimumOrderQuantity = minimumOrderQuantityFor(source.productType)!;
   const expectedTags = [...new Set([...source.tags, B2B_TAG])].sort();
   const currentTags = [...target.tags].sort();
   return (
     target.sourceUpdatedAt?.value !== source.updatedAt ||
-    target.minimumOrderQuantity?.value !== MOQ_VALUE ||
+    target.minimumOrderQuantity?.value !== minimumOrderQuantity ||
     target.title !== `${source.title} B2B` ||
     target.descriptionHtml !== source.descriptionHtml ||
     target.vendor !== source.vendor ||
@@ -474,6 +481,7 @@ async function syncMetafields(
   source: SyncProduct,
   target: SyncProduct,
 ) {
+  const minimumOrderQuantity = minimumOrderQuantityFor(source.productType)!;
   const copied = source.metafields.nodes
     .filter(
       (metafield) =>
@@ -530,7 +538,7 @@ async function syncMetafields(
           namespace: MOQ_NAMESPACE,
           key: MOQ_KEY,
           type: "number_integer",
-          value: MOQ_VALUE,
+          value: minimumOrderQuantity,
         },
         {
           ownerId: target.id,
@@ -809,6 +817,16 @@ export async function syncAllB2BBundles(
         product.tags.some((tag) => normalize(tag) === normalize(B2B_TAG))) &&
       product.isB2B?.value !== B2B_FLAG_VALUE,
   );
+  const incorrectMinimumOrderQuantity = memory.current.some(
+    (product) => {
+      const expected = minimumOrderQuantityFor(product.productType);
+      return (
+        expected &&
+        product.tags.some((tag) => normalize(tag) === normalize(B2B_TAG)) &&
+        product.minimumOrderQuantity?.value !== expected
+      );
+    },
+  );
   const relevantDeletion = memory.deleted.some((product) =>
     Boolean(priceFor(product.productType)),
   );
@@ -843,6 +861,7 @@ export async function syncAllB2BBundles(
     !relevantChange &&
     !relevantDeletion &&
     !missingB2BFlag &&
+    !incorrectMinimumOrderQuantity &&
     !relatedNeedsSync
   ) {
     await saveCatalogSnapshot(shop, memory.current);
@@ -1020,15 +1039,19 @@ export async function syncAllB2BBundles(
     `,
   );
   const invalidMoq = verification.products.nodes.filter(
-    (product) =>
-      priceFor(product.productType) &&
-      product.tags.some((tag) => normalize(tag) === normalize(B2B_TAG)) &&
-      product.minimumOrderQuantity?.jsonValue !== 10,
+    (product) => {
+      const expected = minimumOrderQuantityFor(product.productType);
+      return (
+        expected &&
+        product.tags.some((tag) => normalize(tag) === normalize(B2B_TAG)) &&
+        product.minimumOrderQuantity?.jsonValue !== Number(expected)
+      );
+    },
   );
   if (invalidMoq.length) {
     result.failed.push({
       title: "Mindestbestellmenge",
-      message: `MOQ ist nicht 10 bei: ${invalidMoq.map((product) => product.title).join(", ")}`,
+      message: `MOQ ist nicht korrekt bei: ${invalidMoq.map((product) => product.title).join(", ")}`,
     });
   }
   const invalidB2BFlag = verification.products.nodes.filter(
