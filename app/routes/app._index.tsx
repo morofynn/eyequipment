@@ -75,7 +75,7 @@ export default function Index() {
       shopify.toast.show(
         fetcher.data.kind === "create"
           ? `${fetcher.data.result.title} wurde veröffentlicht.`
-          : `${fetcher.data.result.updated} aktualisiert, ${fetcher.data.result.flagged} als B2B markiert.`,
+          : `${fetcher.data.result.updated} Produkte und ${fetcher.data.result.relatedUpdated} Related-Verknüpfungen aktualisiert.`,
       );
     }
   }, [fetcher.data, shopify]);
@@ -144,6 +144,9 @@ export default function Index() {
           <s-list-item>Mindestbestellmenge auf 10 setzen</s-list-item>
           <s-list-item>Metafeld „ist B2B“ aktivieren</s-list-item>
           <s-list-item>
+            Related Products mit den passenden B2B-Bundles verknüpfen
+          </s-list-item>
+          <s-list-item>
             Nur Online Store, Headless und Point of Sale aktivieren
           </s-list-item>
           <s-list-item>Produkt direkt aktiv veröffentlichen</s-list-item>
@@ -155,7 +158,7 @@ export default function Index() {
           <s-paragraph>
             Prüft alle Tücher und Mäppchen gegen ihre B2B-Versionen und
             aktualisiert geänderte Produktdaten, Bilder, Metafelder,
-            Bundle-Komponenten, Preise und Vertriebskanäle.
+            Bundle-Komponenten, Related Products, Preise und Vertriebskanäle.
           </s-paragraph>
           <s-button
             onClick={syncAll}
@@ -204,6 +207,7 @@ export default function Index() {
           <s-stack direction="block" gap="small">
             <s-text>
               Geprüft: {syncResult.checked} · Aktualisiert: {syncResult.updated} ·
+              Related-Verknüpfungen: {syncResult.relatedUpdated} ·
               Als B2B markiert: {syncResult.flagged} · Entwurf:{" "}
               {syncResult.drafted} · Unverändert: {syncResult.unchanged}
             </s-text>
@@ -215,6 +219,12 @@ export default function Index() {
             {syncResult.missing.length > 0 && (
               <s-text>
                 Fehlende B2B-Bundles: {syncResult.missing.join(", ")}
+              </s-text>
+            )}
+            {syncResult.missingRelated.length > 0 && (
+              <s-text>
+                Fehlende B2B-Ziele für Related Products:{" "}
+                {syncResult.missingRelated.join(", ")}
               </s-text>
             )}
             {syncResult.unconfiguredProductTypes.length > 0 && (

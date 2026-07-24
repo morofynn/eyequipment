@@ -16,6 +16,7 @@ export type CatalogProductMemory = {
   createdAt: string;
   updatedAt: string;
   isB2B: { value: string } | null;
+  relatedProducts: { jsonValue: string[] } | null;
 };
 
 export type CatalogChanges = {
@@ -86,6 +87,12 @@ export async function inspectCatalogChanges(
               isB2B: metafield(namespace: "custom", key: "is-b2b") {
                 value
               }
+              relatedProducts: metafield(
+                namespace: "shopyflow--recommendation"
+                key: "related_products"
+              ) {
+                jsonValue
+              }
             }
             pageInfo {
               hasNextPage
@@ -116,7 +123,9 @@ export async function inspectCatalogChanges(
         saved.productType !== product.productType ||
         JSON.stringify(savedTags) !== JSON.stringify(currentTags) ||
         saved.updatedAt !== product.updatedAt ||
-        saved.isB2B?.value !== product.isB2B?.value)
+        saved.isB2B?.value !== product.isB2B?.value ||
+        JSON.stringify(saved.relatedProducts?.jsonValue ?? []) !==
+          JSON.stringify(product.relatedProducts?.jsonValue ?? []))
     );
   });
   const deleted = previous

@@ -35,6 +35,8 @@ eligible B2C product with `<title> B2B` and synchronizes changed:
 
 The app stores the source product and its last synchronized timestamp in
 app-owned metafields. Unchanged bundles are skipped.
+The related-products field `shopyflow--recommendation.related_products` is
+checked as well; missing corresponding B2B bundles are reported.
 
 The same workflows can be run locally without hosting:
 

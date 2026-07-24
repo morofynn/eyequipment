@@ -5,6 +5,8 @@ const MOQ_VALUE = "10";
 const B2B_FLAG_NAMESPACE = "custom";
 const B2B_FLAG_KEY = "is-b2b";
 const B2B_FLAG_VALUE = "true";
+const RELATED_NAMESPACE = "shopyflow--recommendation";
+const RELATED_KEY = "related_products";
 import {
   inspectCatalogChanges,
   saveCatalogSnapshot,
@@ -61,6 +63,7 @@ type SyncProduct = {
   sourceUpdatedAt: { value: string } | null;
   minimumOrderQuantity: { value: string } | null;
   isB2B: { value: string } | null;
+  relatedProducts: { jsonValue: string[] } | null;
 };
 
 type Publication = {
@@ -73,6 +76,7 @@ export type B2BSyncResult = {
   updated: number;
   drafted: number;
   flagged: number;
+  relatedUpdated: number;
   unchanged: number;
   added: string[];
   changed: string[];
@@ -80,6 +84,7 @@ export type B2BSyncResult = {
   usedMemory: boolean;
   unconfiguredProductTypes: string[];
   missing: string[];
+  missingRelated: string[];
   failed: Array<{ title: string; message: string }>;
 };
 
@@ -222,6 +227,12 @@ async function loadCatalog(admin: AdminClient) {
               isB2B: metafield(namespace: "custom", key: "is-b2b") {
                 value
               }
+              relatedProducts: metafield(
+                namespace: "shopyflow--recommendation"
+                key: "related_products"
+              ) {
+                jsonValue
+              }
             }
             pageInfo {
               hasNextPage
@@ -298,6 +309,98 @@ function needsSync(source: SyncProduct, target: SyncProduct, price: string) {
     target.variants.nodes.some((variant) => variant.price !== price) ||
     !componentsMatch(source, target) ||
     mediaSignature(source.images.nodes) !== mediaSignature(target.images.nodes)
+  );
+}
+
+function sortedReferences(product: {
+  relatedProducts: { jsonValue: string[] } | null;
+}) {
+  return [...(product.relatedProducts?.jsonValue ?? [])].sort();
+}
+
+function relatedBundleReferences(
+  source: { id: string; relatedProducts: { jsonValue: string[] } | null },
+  products: Array<{
+    id: string;
+    title: string;
+    productType: string;
+    tags: string[];
+    relatedProducts: { jsonValue: string[] } | null;
+  }>,
+) {
+  const byId = new Map(products.map((product) => [product.id, product]));
+  const bundleBySourceId = new Map<string, string>();
+
+  for (const candidate of products) {
+    if (
+      candidate.tags.some((tag) => normalize(tag) === normalize(B2B_TAG)) &&
+      candidate.title.endsWith(" B2B")
+    ) {
+      const sourceProduct = products.find(
+        (product) =>
+          product.title === candidate.title.slice(0, -4) &&
+          !product.tags.some((tag) => normalize(tag) === normalize(B2B_TAG)),
+      );
+      if (sourceProduct) bundleBySourceId.set(sourceProduct.id, candidate.id);
+    }
+  }
+
+  const expected: string[] = [];
+  const missing: string[] = [];
+  for (const relatedId of source.relatedProducts?.jsonValue ?? []) {
+    const related = byId.get(relatedId);
+    const bundleId = bundleBySourceId.get(relatedId);
+    if (bundleId) expected.push(bundleId);
+    else if (
+      related &&
+      (isDealerAccessory(related.productType) ||
+        related.tags.some((tag) => normalize(tag) === normalize(B2B_TAG)))
+    ) {
+      expected.push(related.id);
+    }
+    else missing.push(related?.title ?? relatedId);
+  }
+  return { expected: [...new Set(expected)].sort(), missing };
+}
+
+async function syncRelatedProducts(
+  admin: AdminClient,
+  targetId: string,
+  relatedProductIds: string[],
+) {
+  const data = await graphql<{
+    metafieldsSet: { userErrors: UserError[] };
+  }>(
+    admin,
+    `#graphql
+      mutation B2BSyncRelatedProducts($metafields: [MetafieldsSetInput!]!) {
+        metafieldsSet(metafields: $metafields) {
+          metafields {
+            id
+            jsonValue
+          }
+          userErrors {
+            field
+            message
+          }
+        }
+      }
+    `,
+    {
+      metafields: [
+        {
+          ownerId: targetId,
+          namespace: RELATED_NAMESPACE,
+          key: RELATED_KEY,
+          type: "list.product_reference",
+          value: JSON.stringify(relatedProductIds),
+        },
+      ],
+    },
+  );
+  assertNoErrors(
+    "Verknüpfte B2B-Produkte aktualisieren",
+    data.metafieldsSet.userErrors,
   );
 }
 
@@ -715,12 +818,32 @@ export async function syncAllB2BBundles(
       !product.tags.some((tag) => normalize(tag) === normalize(B2B_TAG)) &&
       !product.title.endsWith(" B2B"),
   ).length;
+  const memorySources = memory.current.filter(
+    (product) =>
+      priceFor(product.productType) &&
+      !product.tags.some((tag) => normalize(tag) === normalize(B2B_TAG)) &&
+      !product.title.endsWith(" B2B"),
+  );
+  const relatedNeedsSync = memorySources.some((source) => {
+    const target = memory.current.find(
+      (product) =>
+        product.title === `${source.title} B2B` &&
+        product.tags.some((tag) => normalize(tag) === normalize(B2B_TAG)),
+    );
+    if (!target) return false;
+    const mapping = relatedBundleReferences(source, memory.current);
+    return (
+      mapping.missing.length > 0 ||
+      JSON.stringify(mapping.expected) !== JSON.stringify(sortedReferences(target))
+    );
+  });
 
   if (
     memory.initialized &&
     !relevantChange &&
     !relevantDeletion &&
-    !missingB2BFlag
+    !missingB2BFlag &&
+    !relatedNeedsSync
   ) {
     await saveCatalogSnapshot(shop, memory.current);
     return {
@@ -728,6 +851,7 @@ export async function syncAllB2BBundles(
       updated: 0,
       drafted: 0,
       flagged: 0,
+      relatedUpdated: 0,
       unchanged: sourceCount,
       added: memory.added.map((product) => product.title),
       changed: memory.changed.map((product) => product.title),
@@ -735,6 +859,7 @@ export async function syncAllB2BBundles(
       usedMemory: true,
       unconfiguredProductTypes: unconfiguredProductTypes(memory.current),
       missing: [],
+      missingRelated: [],
       failed: [],
     };
   }
@@ -761,6 +886,7 @@ export async function syncAllB2BBundles(
     updated: 0,
     drafted: 0,
     flagged: 0,
+    relatedUpdated: 0,
     unchanged: 0,
     added: memory.added.map((product) => product.title),
     changed: memory.changed.map((product) => product.title),
@@ -768,6 +894,7 @@ export async function syncAllB2BBundles(
     usedMemory: false,
     unconfiguredProductTypes: unconfiguredProductTypes(products),
     missing: [],
+    missingRelated: [],
     failed: [],
   };
 
@@ -819,8 +946,27 @@ export async function syncAllB2BBundles(
       continue;
     }
     const price = priceFor(source.productType)!;
+    const related = relatedBundleReferences(source, products);
+    for (const title of related.missing) {
+      result.missingRelated.push(`${source.title} → ${title}`);
+    }
+    const relatedChanged =
+      JSON.stringify(related.expected) !==
+      JSON.stringify(sortedReferences(target));
     if (!needsSync(source, target, price)) {
-      result.unchanged += 1;
+      if (!relatedChanged) result.unchanged += 1;
+      else {
+        try {
+          await syncRelatedProducts(admin, target.id, related.expected);
+          result.relatedUpdated += 1;
+        } catch (error) {
+          result.failed.push({
+            title: target.title,
+            message:
+              error instanceof Error ? error.message : "Unbekannter Fehler",
+          });
+        }
+      }
       continue;
     }
 
@@ -830,6 +976,10 @@ export async function syncAllB2BBundles(
       await syncImages(admin, source, target);
       await syncVariants(admin, source, target, price);
       await syncPublications(admin, target.id, publications);
+      if (relatedChanged) {
+        await syncRelatedProducts(admin, target.id, related.expected);
+        result.relatedUpdated += 1;
+      }
       result.updated += 1;
     } catch (error) {
       result.failed.push({

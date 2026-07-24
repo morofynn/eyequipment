@@ -67,6 +67,7 @@ console.log(`Geprüft: ${result.checked}`);
 console.log(`Aktualisiert: ${result.updated}`);
 console.log(`Auf Entwurf gesetzt: ${result.drafted}`);
 console.log(`Als B2B markiert: ${result.flagged}`);
+console.log(`Related-B2B-Verknüpfungen aktualisiert: ${result.relatedUpdated}`);
 console.log(`Unverändert: ${result.unchanged}`);
 console.log(
   `Katalog: ${result.added.length} neu, ${result.changed.length} geändert, ${result.deleted.length} gelöscht`,
@@ -82,6 +83,11 @@ if (result.unconfiguredProductTypes.length) {
 }
 if (result.missing.length) {
   console.log(`Fehlende B2B-Bundles: ${result.missing.join(", ")}`);
+}
+if (result.missingRelated.length) {
+  console.log(
+    `Fehlende B2B-Bundles für Related Products: ${result.missingRelated.join(", ")}`,
+  );
 }
 if (result.failed.length) {
   for (const failure of result.failed) {
