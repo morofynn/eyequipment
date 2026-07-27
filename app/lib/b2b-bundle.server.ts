@@ -57,8 +57,8 @@ function priceFor(product: SourceProduct) {
       "Händlerzubehör ist bereits für Händler bestimmt und wird nicht als B2B-Bundle dupliziert.",
     );
   }
-  if (["tuch", "tücher"].includes(productType)) return "6.00";
-  if (["mäppchen"].includes(productType)) return "5.00";
+  if (["tuch", "tücher"].includes(productType)) return "7.14";
+  if (["mäppchen"].includes(productType)) return "5.95";
 
   throw new Error(
     `Produkttyp „${product.productType || "nicht gesetzt"}“ ist noch nicht für B2B konfiguriert. Bitte zuerst B2B-Preis und Mindestbestellmenge festlegen.`,

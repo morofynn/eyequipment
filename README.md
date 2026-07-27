@@ -4,8 +4,8 @@ Embedded Shopify app for creating a B2B bundle from an existing B2C product.
 
 ## Rules
 
-- `Tücher`: EUR 6.00 per bundle variant
-- `Mäppchen`: EUR 5.00 per bundle variant
+- `Tücher`: EUR 7.14 gross per bundle variant (EUR 6.00 plus 19% VAT)
+- `Mäppchen`: EUR 5.95 gross per bundle variant (EUR 5.00 plus 19% VAT)
 - `Händlerzubehör`: skipped because these products are already intended for B2B
 - The generated title is `<B2C title> B2B`
 - Existing product data, variants, images, tags, and metafields are duplicated

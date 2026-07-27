@@ -18,6 +18,9 @@ export type CatalogProductMemory = {
   isB2B: { value: string } | null;
   minimumOrderQuantity: { value: string } | null;
   relatedProducts: { jsonValue: string[] } | null;
+  variants: {
+    nodes: Array<{ price: string; compareAtPrice: string | null }>;
+  };
 };
 
 export type CatalogChanges = {
@@ -97,6 +100,12 @@ export async function inspectCatalogChanges(
               ) {
                 jsonValue
               }
+              variants(first: 20) {
+                nodes {
+                  price
+                  compareAtPrice
+                }
+              }
             }
             pageInfo {
               hasNextPage
@@ -131,7 +140,9 @@ export async function inspectCatalogChanges(
         saved.minimumOrderQuantity?.value !==
           product.minimumOrderQuantity?.value ||
         JSON.stringify(saved.relatedProducts?.jsonValue ?? []) !==
-          JSON.stringify(product.relatedProducts?.jsonValue ?? []))
+          JSON.stringify(product.relatedProducts?.jsonValue ?? []) ||
+        JSON.stringify(saved.variants?.nodes ?? []) !==
+          JSON.stringify(product.variants.nodes))
     );
   });
   const deleted = previous

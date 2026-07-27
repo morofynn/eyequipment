@@ -210,8 +210,8 @@ function resolvePublications(publications) {
 
 function priceFor(productType) {
   const normalized = productType.trim().toLocaleLowerCase("de-DE");
-  if (["tuch", "tücher"].includes(normalized)) return "6.00";
-  if (normalized === "mäppchen") return "5.00";
+  if (["tuch", "tücher"].includes(normalized)) return "7.14";
+  if (normalized === "mäppchen") return "5.95";
   return null;
 }
 

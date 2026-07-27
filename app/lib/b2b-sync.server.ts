@@ -94,8 +94,8 @@ function normalize(value: string) {
 
 function priceFor(productType: string) {
   const normalized = normalize(productType);
-  if (["tuch", "tücher"].includes(normalized)) return "6.00";
-  if (normalized === "mäppchen") return "5.00";
+  if (["tuch", "tücher"].includes(normalized)) return "7.14";
+  if (normalized === "mäppchen") return "5.95";
   return null;
 }
 
@@ -833,6 +833,16 @@ export async function syncAllB2BBundles(
       );
     },
   );
+  const incorrectAutomaticPrice = memory.current.some((product) => {
+    const expected = priceFor(product.productType);
+    return (
+      expected &&
+      product.tags.some((tag) => normalize(tag) === normalize(B2B_TAG)) &&
+      product.variants.nodes.some(
+        (variant) => !variant.compareAtPrice && variant.price !== expected,
+      )
+    );
+  });
   const relevantDeletion = memory.deleted.some((product) =>
     Boolean(priceFor(product.productType)),
   );
@@ -868,6 +878,7 @@ export async function syncAllB2BBundles(
     !relevantDeletion &&
     !missingB2BFlag &&
     !incorrectMinimumOrderQuantity &&
+    !incorrectAutomaticPrice &&
     !relatedNeedsSync
   ) {
     await saveCatalogSnapshot(shop, memory.current);

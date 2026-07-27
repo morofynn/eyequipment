@@ -124,7 +124,7 @@ export default function Index() {
       <s-section heading="B2C-Produkt auswählen">
         <s-stack direction="block" gap="base">
           <s-paragraph>
-            Tücher werden für 6,00 €, Mäppchen für 5,00 € angelegt.
+            Tücher werden für 7,14 € brutto, Mäppchen für 5,95 € brutto angelegt.
             Produkte vom Typ Händlerzubehör werden nicht dupliziert.
           </s-paragraph>
           <s-stack direction="inline" gap="base">
