@@ -10,6 +10,7 @@ Embedded Shopify app for creating a B2B bundle from an existing B2C product.
 - The generated title is `<B2C title> B2B`
 - Existing product data, variants, images, tags, and metafields are duplicated
 - Every generated variant contains the matching B2C variant with quantity `1`
+- Compare-at prices are not copied from B2C variants
 - The tag `B2B` is added
 - The existing product metafield `custom.moq` is set to `5` for Tücher and
   `3` for Mäppchen
@@ -31,7 +32,8 @@ eligible B2C product with `<title> B2B` and synchronizes changed:
 - titles, descriptions, vendor, product type, tags, SEO, and status
 - product images and custom product metafields
 - bundle component relationships
-- fixed B2B prices and minimum order quantity
+- fixed B2B prices and minimum order quantity; variants with a manually set
+  compare-at price keep their normal price as well
 - B2B sales-channel publications
 
 The app stores the source product and its last synchronized timestamp in

@@ -41,6 +41,7 @@ type Variant = {
   id: string;
   position: number;
   price: string;
+  compareAtPrice: string | null;
   productVariantComponents: {
     nodes: Array<{ productVariant: { id: string } }>;
   };
@@ -197,6 +198,7 @@ async function loadCatalog(admin: AdminClient) {
                   id
                   position
                   price
+                  compareAtPrice
                   productVariantComponents(first: 10) {
                     nodes {
                       productVariant {
@@ -313,7 +315,9 @@ function needsSync(source: SyncProduct, target: SyncProduct, price: string) {
     target.productType !== source.productType ||
     target.status !== "ACTIVE" ||
     JSON.stringify(currentTags) !== JSON.stringify(expectedTags) ||
-    target.variants.nodes.some((variant) => variant.price !== price) ||
+    target.variants.nodes.some(
+      (variant) => !variant.compareAtPrice && variant.price !== price,
+    ) ||
     !componentsMatch(source, target) ||
     mediaSignature(source.images.nodes) !== mediaSignature(target.images.nodes)
   );
@@ -712,6 +716,11 @@ async function syncVariants(
     );
   }
 
+  const automaticPriceVariants = target.variants.nodes
+    .filter((variant) => !variant.compareAtPrice)
+    .map((variant) => ({ id: variant.id, price }));
+  if (!automaticPriceVariants.length) return;
+
   const priceData = await graphql<{
     productVariantsBulkUpdate: { userErrors: UserError[] };
   }>(
@@ -734,10 +743,7 @@ async function syncVariants(
     `,
     {
       productId: target.id,
-      variants: target.variants.nodes.map((variant) => ({
-        id: variant.id,
-        price,
-      })),
+      variants: automaticPriceVariants,
     },
   );
   assertNoErrors("B2B-Preise aktualisieren", priceData.productVariantsBulkUpdate.userErrors);

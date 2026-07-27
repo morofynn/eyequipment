@@ -263,6 +263,7 @@ async function duplicateProduct(
     return {
       id: variant.id,
       price,
+      compareAtPrice: null,
     };
   });
 

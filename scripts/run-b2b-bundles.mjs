@@ -24,7 +24,7 @@ const inventoryQuery = `query B2BBatchInventory {
       tags
       status
       variants(first: 250) {
-        nodes { id position sku }
+        nodes { id position sku compareAtPrice }
       }
     }
   }
@@ -270,6 +270,7 @@ for (const [index, source] of sources.entries()) {
       return {
         id: variant.id,
         price: priceFor(source.productType),
+        compareAtPrice: null,
       };
     });
     const relationships = product.variants.nodes.map((variant) => {
@@ -339,14 +340,21 @@ for (const [index, product] of b2bProducts.entries()) {
     `[price ${index + 1}/${b2bProducts.length}] ${product.title} ... `,
   );
   try {
+    const automaticPriceVariants = product.variants.nodes
+      .filter((variant) => !variant.compareAtPrice)
+      .map((variant) => ({
+        id: variant.id,
+        price: priceFor(product.productType),
+      }));
+    if (!automaticPriceVariants.length) {
+      console.log("manual prices protected");
+      continue;
+    }
     const result = execute(
       finalizePricesMutation,
       {
         productId: product.id,
-        variants: product.variants.nodes.map((variant) => ({
-          id: variant.id,
-          price: priceFor(product.productType),
-        })),
+        variants: automaticPriceVariants,
       },
       true,
     );

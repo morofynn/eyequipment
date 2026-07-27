@@ -149,6 +149,9 @@ export default function Index() {
             Related Products mit den passenden B2B-Bundles verknüpfen
           </s-list-item>
           <s-list-item>
+            Manuelle Bundle-Preise schützen, sobald ein Vergleichspreis gesetzt ist
+          </s-list-item>
+          <s-list-item>
             Nur Online Store, Headless und Point of Sale aktivieren
           </s-list-item>
           <s-list-item>Produkt direkt aktiv veröffentlichen</s-list-item>
@@ -160,7 +163,9 @@ export default function Index() {
           <s-paragraph>
             Prüft alle Tücher und Mäppchen gegen ihre B2B-Versionen und
             aktualisiert geänderte Produktdaten, Bilder, Metafelder,
-            Bundle-Komponenten, Related Products, Preise und Vertriebskanäle.
+            Bundle-Komponenten, Related Products, automatische Preise und
+            Vertriebskanäle. Varianten mit Vergleichspreis behalten ihren
+            manuell gepflegten Preis.
           </s-paragraph>
           <s-button
             onClick={syncAll}
