@@ -1,3 +1,364 @@
+(function () {
+  'use strict';
+
+  if (window.EyequipmentRuntime?.version) return;
+
+  const mutationSubscribers = new Map();
+  const scheduledJobs = new Map();
+  const frameTasks = new Map();
+  const resizeCallbacks = new WeakMap();
+  const intersectionGroups = new Map();
+
+  let mutationObserver = null;
+  let resizeObserver = null;
+  let frameRequest = 0;
+  let lastFrameTime = 0;
+  let subscriberId = 0;
+  const diagnostics = {
+    startedAt: Date.now(),
+    frames: 0,
+    scheduledJobs: 0,
+    mutationBatches: 0,
+    mutationRecords: 0,
+    errors: 0
+  };
+
+  function reportError(area, error) {
+    diagnostics.errors += 1;
+    console.error(`[Eyequipment Runtime] Fehler in ${area}:`, error);
+  }
+
+  function nextId(prefix) {
+    subscriberId += 1;
+    return `${prefix}-${subscriberId}`;
+  }
+
+  function whenReady(callback) {
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', callback, { once: true });
+    } else {
+      callback();
+    }
+  }
+
+  function startMutationObserver() {
+    if (mutationObserver || !document.body) return;
+
+    mutationObserver = new MutationObserver(function (mutations) {
+      diagnostics.mutationBatches += 1;
+      diagnostics.mutationRecords += mutations.length;
+
+      mutationSubscribers.forEach(function (subscriber, key) {
+        const filtered = filterMutations(mutations, subscriber.options);
+        if (!filtered.length) return;
+        try {
+          subscriber.callback(filtered);
+        } catch (error) {
+          reportError(`Mutation-Subscriber „${key}“`, error);
+        }
+      });
+    });
+
+    mutationObserver.observe(document.body, {
+      childList: true,
+      subtree: true,
+      attributes: true,
+      characterData: false
+    });
+  }
+
+  function filterMutations(mutations, options) {
+    if (!options) return mutations;
+    const root = options.root;
+    const attributes = Array.isArray(options.attributes)
+      ? new Set(options.attributes)
+      : null;
+
+    return mutations.filter(function (mutation) {
+      if (
+        root instanceof Element &&
+        mutation.target !== root &&
+        !root.contains(mutation.target)
+      ) return false;
+      if (mutation.type === 'attributes') {
+        if (options.attributes === false) return false;
+        if (attributes && !attributes.has(mutation.attributeName)) return false;
+      }
+      if (mutation.type === 'childList' && options.childList === false) return false;
+      return mutation.type !== 'characterData';
+    });
+  }
+
+  function observeMutations(key, callback, options) {
+    if (typeof key === 'function') {
+      callback = key;
+      key = nextId('mutation');
+    }
+
+    if (typeof callback !== 'function') return function () {};
+
+    mutationSubscribers.set(key, { callback, options: options || null });
+    whenReady(startMutationObserver);
+
+    return function () {
+      mutationSubscribers.delete(key);
+    };
+  }
+
+  function schedule(key, callback) {
+    if (typeof key === 'function') {
+      callback = key;
+      key = nextId('job');
+    }
+
+    if (typeof callback !== 'function') return;
+    scheduledJobs.set(key, callback);
+    diagnostics.scheduledJobs += 1;
+    requestNextFrame();
+  }
+
+  function requestNextFrame() {
+    if (frameRequest) return;
+    frameRequest = requestAnimationFrame(runFrame);
+  }
+
+  function runFrame(time) {
+    frameRequest = 0;
+    diagnostics.frames += 1;
+
+    const jobs = Array.from(scheduledJobs.entries());
+    scheduledJobs.clear();
+
+    jobs.forEach(function (entry) {
+      try {
+        entry[1](time);
+      } catch (error) {
+        reportError(`Frame-Job „${entry[0]}“`, error);
+      }
+    });
+
+    let hasActiveTasks = false;
+    frameTasks.forEach(function (task, key) {
+      if (!task.active) return;
+      hasActiveTasks = true;
+      const interval = task.fps > 0 ? 1000 / task.fps : 0;
+      if (interval && task.lastRun && time - task.lastRun < interval) return;
+      const delta = task.lastRun ? Math.min(100, time - task.lastRun) : 16.67;
+      task.lastRun = time;
+      try {
+        task.callback(time, delta);
+      } catch (error) {
+        reportError(`Animation „${key}“`, error);
+      }
+    });
+
+    lastFrameTime = hasActiveTasks ? time : 0;
+    if (hasActiveTasks || scheduledJobs.size) requestNextFrame();
+  }
+
+  function addFrameTask(key, callback, options) {
+    if (typeof key === 'function') {
+      callback = key;
+      key = nextId('animation');
+    }
+
+    if (typeof callback !== 'function') return function () {};
+
+    const settings = options || {};
+    const task = {
+      callback,
+      active: settings.active !== false,
+      fps: Math.max(0, Number(settings.fps) || 0),
+      lastRun: 0
+    };
+    frameTasks.set(key, task);
+    if (task.active) requestNextFrame();
+
+    function remove() {
+      frameTasks.delete(key);
+    }
+    remove.pause = function () {
+      task.active = false;
+      task.lastRun = 0;
+    };
+    remove.resume = function () {
+      if (!frameTasks.has(key)) return;
+      task.active = true;
+      task.lastRun = 0;
+      requestNextFrame();
+    };
+    remove.setFps = function (fps) {
+      task.fps = Math.max(0, Number(fps) || 0);
+      task.lastRun = 0;
+    };
+    remove.isActive = function () { return task.active; };
+    return remove;
+  }
+
+  function getDiagnostics() {
+    let activeFrameTasks = 0;
+    frameTasks.forEach(function (task) {
+      if (task.active) activeFrameTasks += 1;
+    });
+    return {
+      version: '1.2.0',
+      uptimeMs: Date.now() - diagnostics.startedAt,
+      mutationSubscribers: mutationSubscribers.size,
+      resizeObserverActive: Boolean(resizeObserver),
+      intersectionGroups: intersectionGroups.size,
+      frameTasks: frameTasks.size,
+      activeFrameTasks,
+      pendingJobs: scheduledJobs.size,
+      frames: diagnostics.frames,
+      scheduledJobsTotal: diagnostics.scheduledJobs,
+      mutationBatches: diagnostics.mutationBatches,
+      mutationRecords: diagnostics.mutationRecords,
+      errors: diagnostics.errors
+    };
+  }
+
+  function getResizeObserver() {
+    if (resizeObserver || !('ResizeObserver' in window)) return resizeObserver;
+
+    resizeObserver = new ResizeObserver(function (entries) {
+      entries.forEach(function (entry) {
+        const callbacks = resizeCallbacks.get(entry.target);
+        if (!callbacks) return;
+
+        callbacks.forEach(function (callback) {
+          try {
+            callback(entry);
+          } catch (error) {
+            reportError('Resize-Subscriber', error);
+          }
+        });
+      });
+    });
+
+    return resizeObserver;
+  }
+
+  function observeResize(element, callback) {
+    if (!(element instanceof Element) || typeof callback !== 'function') {
+      return function () {};
+    }
+
+    const observer = getResizeObserver();
+    if (!observer) return function () {};
+
+    let callbacks = resizeCallbacks.get(element);
+    if (!callbacks) {
+      callbacks = new Set();
+      resizeCallbacks.set(element, callbacks);
+      observer.observe(element);
+    }
+
+    callbacks.add(callback);
+
+    return function () {
+      const currentCallbacks = resizeCallbacks.get(element);
+      if (!currentCallbacks) return;
+
+      currentCallbacks.delete(callback);
+      if (currentCallbacks.size) return;
+
+      observer.unobserve(element);
+      resizeCallbacks.delete(element);
+    };
+  }
+
+  function intersectionKey(options) {
+    const threshold = Array.isArray(options.threshold)
+      ? options.threshold.join(',')
+      : String(options.threshold ?? 0);
+
+    return `${options.rootMargin || '0px'}|${threshold}`;
+  }
+
+  function getIntersectionGroup(options) {
+    if (!('IntersectionObserver' in window)) return null;
+
+    const normalizedOptions = {
+      root: options.root || null,
+      rootMargin: options.rootMargin || '0px',
+      threshold: options.threshold ?? 0
+    };
+
+    /* Unterschiedliche root-Elemente dürfen nie denselben Observer teilen. */
+    if (normalizedOptions.root) return null;
+
+    const key = intersectionKey(normalizedOptions);
+    if (intersectionGroups.has(key)) return intersectionGroups.get(key);
+
+    const callbacks = new WeakMap();
+    const observer = new IntersectionObserver(function (entries) {
+      entries.forEach(function (entry) {
+        const elementCallbacks = callbacks.get(entry.target);
+        if (!elementCallbacks) return;
+
+        elementCallbacks.forEach(function (callback) {
+          try {
+            callback(entry);
+          } catch (error) {
+            reportError('Intersection-Subscriber', error);
+          }
+        });
+      });
+    }, normalizedOptions);
+
+    const group = { observer, callbacks };
+    intersectionGroups.set(key, group);
+    return group;
+  }
+
+  function observeIntersection(element, callback, options) {
+    if (!(element instanceof Element) || typeof callback !== 'function') {
+      return function () {};
+    }
+
+    const settings = options || {};
+    const group = getIntersectionGroup(settings);
+
+    if (!group) {
+      const individualObserver = new IntersectionObserver(function (entries) {
+        entries.forEach(callback);
+      }, settings);
+      individualObserver.observe(element);
+      return function () { individualObserver.disconnect(); };
+    }
+
+    let callbacks = group.callbacks.get(element);
+    if (!callbacks) {
+      callbacks = new Set();
+      group.callbacks.set(element, callbacks);
+      group.observer.observe(element);
+    }
+
+    callbacks.add(callback);
+
+    return function () {
+      const currentCallbacks = group.callbacks.get(element);
+      if (!currentCallbacks) return;
+
+      currentCallbacks.delete(callback);
+      if (currentCallbacks.size) return;
+
+      group.observer.unobserve(element);
+      group.callbacks.delete(element);
+    };
+  }
+
+  window.EyequipmentRuntime = Object.freeze({
+    version: '1.2.0',
+    whenReady,
+    observeMutations,
+    observeResize,
+    observeIntersection,
+    schedule,
+    addFrameTask,
+    getDiagnostics
+  });
+})();
 (() => {
   if (window.EyequipmentNativeB2B?.initialized) return;
 
