@@ -831,6 +831,48 @@
     }
   }
 
+  function clearStoredCartId() {
+    try { localStorage.removeItem('_sf-cart-id'); } catch {}
+  }
+
+  function restoreB2CCartSummary() {
+    state.lastCartSummary = null;
+    document.querySelectorAll('.native-b2b-shipping-row, .native-b2b-tax-row').forEach(
+      (row) => row.remove(),
+    );
+    const subtotal = document.querySelector('[sf-cart-subtotal]');
+    const subtotalLabel = subtotal?.closest('[sf-cart-subtotal-wrapper], .cart_subtotal-row')?.querySelector('.label');
+    setNodeText(subtotalLabel, 'Zwischensumme');
+
+    const total = document.querySelector('[sf-cart-total]');
+    const totalLabel = total?.closest('.cart_total-row')?.querySelector('.label');
+    if (totalLabel && !totalLabel.querySelector('.mwst')) {
+      totalLabel.innerHTML = 'Gesamtsumme <span class="mwst"></span>';
+    }
+  }
+
+  async function resetToAnonymousCart() {
+    clearStoredCartId();
+    if (window.Shopyflow) window.Shopyflow._cart = null;
+
+    const domain = shopDomain(), sfToken = storefrontToken();
+    if (!domain || !sfToken) return;
+    const data = await graphql(
+      `https://${domain}/api/${API_VERSION}/graphql.json`,
+      CART_CREATE_CONTEXT_MUTATION,
+      { input: {} },
+      { 'X-Shopify-Storefront-Access-Token': sfToken },
+    );
+    const payload = data?.cartCreate;
+    if (!payload?.cart?.id || payload.userErrors?.length) {
+      throw new Error(payload?.userErrors?.map(error => error.message).join('; ') ||
+        'Der anonyme Warenkorb konnte nicht erstellt werden.');
+    }
+    storeCartId(payload.cart.id);
+    if (window.Shopyflow) window.Shopyflow._cart = payload.cart;
+    await window.Shopyflow?.refetchCart?.();
+  }
+
   function idNumber(value) {
     return String(value || '').split('/').pop();
   }
@@ -1827,10 +1869,19 @@
       state.statusError = false;
       state.cartContextError = false;
       try { sessionStorage.removeItem(LOCATION_KEY); } catch {}
+      try {
+        localStorage.removeItem('sf_is_b2b');
+        sessionStorage.removeItem('sf_is_b2b');
+      } catch {}
       contextualizedCarts.clear();
       state.statusPromise = null;
       clearCachedB2BState();
       setNativeState(false);
+      restoreB2CCartSummary();
+      resetToAnonymousCart().catch((error) => {
+        clearStoredCartId();
+        console.error('[Eyequipment B2B] B2C-Warenkorb konnte nach dem Logout nicht zurückgesetzt werden:', error);
+      });
       finishPricePending();
     });
   }
