@@ -1511,7 +1511,7 @@
         setNodeText(shippingText, `Noch ${formatCartMoney(remaining, currency)} Nettowarenwert bis zum Mindestbestellwert von ${formatCartMoney(B2B_MINIMUM_ORDER, currency)}.`);
         shippingText.style.removeProperty('color');
       } else {
-        setNodeText(shippingText, 'Mindestbestellwert erreicht.');
+        setNodeText(shippingText, 'Herzlichen Glückwunsch! Mindestbestellwert erreicht! :)');
         shippingText.style.setProperty('color', '#05B147', 'important');
       }
     }
