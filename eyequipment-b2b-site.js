@@ -1508,10 +1508,10 @@
     const progress = document.querySelector('.shipping-line-front');
     if (shippingText) {
       if (remaining > 0) {
-        setNodeHTML(shippingText, `Noch <strong>${formatCartMoney(remaining, currency)}</strong> Nettowarenwert bis zum Mindestbestellwert von ${formatCartMoney(B2B_MINIMUM_ORDER, currency)}.`);
+        setNodeText(shippingText, `Noch ${formatCartMoney(remaining, currency)} Nettowarenwert bis zum Mindestbestellwert von ${formatCartMoney(B2B_MINIMUM_ORDER, currency)}.`);
         shippingText.style.removeProperty('color');
       } else {
-        setNodeHTML(shippingText, '<strong>Mindestbestellwert erreicht.</strong>');
+        setNodeText(shippingText, 'Mindestbestellwert erreicht.');
         shippingText.style.setProperty('color', '#05B147', 'important');
       }
     }
