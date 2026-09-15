@@ -23,6 +23,31 @@
     errors: 0
   };
 
+  function ensureCartViewportStyles() {
+    if (document.getElementById('eyequipment-cart-viewport-styles')) return;
+    const style = document.createElement('style');
+    style.id = 'eyequipment-cart-viewport-styles';
+    style.textContent = `
+      .cart-popup {
+        max-height: 100vh !important;
+        max-height: 100dvh !important;
+        overflow-x: hidden !important;
+        overflow-y: auto !important;
+        overscroll-behavior: contain;
+        -webkit-overflow-scrolling: touch;
+      }
+      .cart-container.is-popup {
+        height: auto !important;
+        min-height: 100vh !important;
+        min-height: 100dvh !important;
+        padding-bottom: max(env(safe-area-inset-bottom), 1px);
+      }
+    `;
+    document.head.appendChild(style);
+  }
+
+  ensureCartViewportStyles();
+
   function reportError(area, error) {
     diagnostics.errors += 1;
     console.error(`[Eyequipment Runtime] Fehler in ${area}:`, error);
