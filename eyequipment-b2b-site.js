@@ -370,6 +370,7 @@
 
   const API_VERSION = '2026-07';
   const B2B_MINIMUM_ORDER = 100;
+  const B2B_TAX_RATE = 0.19;
   const TOKEN_KEYS = ['_sf-customer-token', '_sf_customer_token', '_sf_oauth_tokens', '_sf-oauth-tokens'];
   const CACHE_KEY = '_eyequipment_b2b_cache';
   
@@ -617,7 +618,20 @@
         buyerIdentity { purchasingCompany { location { id } } }
         cost {
           subtotalAmount { amount currencyCode }
+          totalTaxAmount { amount currencyCode }
           totalAmount { amount currencyCode }
+        }
+        deliveryGroups(first: 10) {
+          nodes {
+            selectedDeliveryOption {
+              title
+              estimatedCost { amount currencyCode }
+            }
+            deliveryOptions {
+              title
+              estimatedCost { amount currencyCode }
+            }
+          }
         }
         lines(first: 250) {
           nodes {
@@ -1404,6 +1418,128 @@
     });
   }
 
+  function cartMoney(cart, path, fallback = 0) {
+    const value = path.reduce((current, key) => current?.[key], cart);
+    const amount = Number(value?.amount);
+    return Number.isFinite(amount) ? amount : fallback;
+  }
+
+  function formatCartMoney(amount, currencyCode = 'EUR') {
+    return new Intl.NumberFormat('de-DE', {
+      style: 'currency',
+      currency: currencyCode || 'EUR',
+      minimumFractionDigits: 2,
+    }).format(Number(amount) || 0);
+  }
+
+  function setNodeText(element, value) {
+    if (element && element.textContent !== value) element.textContent = value;
+  }
+
+  function setNodeHTML(element, value) {
+    if (element && element.innerHTML !== value) element.innerHTML = value;
+  }
+
+  function selectedShippingCost(cart) {
+    const groups = cart?.deliveryGroups?.nodes || cart?.deliveryGroups?.edges?.map(edge => edge?.node) || [];
+    const selected = groups
+      .map(group => group?.selectedDeliveryOption)
+      .filter(Boolean);
+    if (selected.length) {
+      return selected.reduce((sum, option) =>
+        sum + Number(option?.estimatedCost?.amount || 0), 0);
+    }
+
+    const subtotal = cartMoney(cart, ['cost', 'subtotalAmount']);
+    const total = cartMoney(cart, ['cost', 'totalAmount'], subtotal);
+    const reportedTax = cartMoney(cart, ['cost', 'totalTaxAmount']);
+    return Math.max(0, total - subtotal - reportedTax);
+  }
+
+  function ensureCostRow(container, className, label) {
+    let row = container.querySelector(`.${className}`);
+    if (!row) {
+      row = document.createElement('div');
+      row.className = `cart_subtotal-row ${className}`;
+      row.innerHTML = `<div class="label total">${label}</div><div class="native-b2b-cost-value"></div>`;
+      const totalRow = container.querySelector('.cart_total-row');
+      container.insertBefore(row, totalRow || null);
+    }
+    return row.querySelector('.native-b2b-cost-value');
+  }
+
+  function updateB2BCartSummary(cart) {
+    if (!state.isB2B || !cart?.cost) return;
+    state.lastCartSummary = cart;
+
+    const subtotal = cartMoney(cart, ['cost', 'subtotalAmount']);
+    const shipping = selectedShippingCost(cart);
+    const taxableNet = subtotal + shipping;
+    const reportedTax = cartMoney(cart, ['cost', 'totalTaxAmount']);
+    const tax = reportedTax > 0 ? reportedTax : taxableNet * B2B_TAX_RATE;
+    const gross = taxableNet + tax;
+    const currency = cart.cost?.subtotalAmount?.currencyCode || 'EUR';
+
+    const subtotalElement = document.querySelector('[sf-cart-subtotal]');
+    const subtotalRow = subtotalElement?.closest('[sf-cart-subtotal-wrapper], .cart_subtotal-row');
+    const subtotalLabel = subtotalRow?.querySelector('.label');
+    setNodeText(subtotalLabel, 'Warenwert netto');
+    setNodeText(subtotalElement, formatCartMoney(subtotal, currency));
+
+    const totalElement = document.querySelector('[sf-cart-total]');
+    const costsContainer = totalElement?.closest('.cart_discounts-and-total') || totalElement?.parentElement?.parentElement;
+    if (costsContainer) {
+      const shippingValue = ensureCostRow(costsContainer, 'native-b2b-shipping-row', 'Versand netto');
+      const taxValue = ensureCostRow(costsContainer, 'native-b2b-tax-row', 'Umsatzsteuer (19 %)');
+      setNodeText(shippingValue, formatCartMoney(shipping, currency));
+      setNodeText(taxValue, formatCartMoney(tax, currency));
+    }
+
+    const totalRow = totalElement?.closest('.cart_total-row');
+    const totalLabel = totalRow?.querySelector('.label');
+    setNodeText(totalLabel, 'Gesamtsumme inkl. USt.');
+    setNodeText(totalElement, formatCartMoney(gross, currency));
+
+    const taxHint = document.querySelector('.mwst');
+    if (taxHint) taxHint.style.display = 'none';
+
+    const remaining = Math.max(0, B2B_MINIMUM_ORDER - subtotal);
+    const shippingText = document.querySelector('.shipping-text');
+    const progress = document.querySelector('.shipping-line-front');
+    if (shippingText) {
+      if (remaining > 0) {
+        setNodeHTML(shippingText, `Noch <strong>${formatCartMoney(remaining, currency)}</strong> Nettowarenwert bis zum Mindestbestellwert von ${formatCartMoney(B2B_MINIMUM_ORDER, currency)}.`);
+        shippingText.style.removeProperty('color');
+      } else {
+        setNodeHTML(shippingText, '<strong>Mindestbestellwert erreicht.</strong>');
+        shippingText.style.setProperty('color', '#05B147', 'important');
+      }
+    }
+    if (progress) {
+      const percentage = Math.max(subtotal === 0 ? 3 : 0, Math.min(100, subtotal / B2B_MINIMUM_ORDER * 100));
+      progress.style.setProperty('width', `${percentage}%`, 'important');
+      progress.style.setProperty('transform', 'none', 'important');
+    }
+  }
+
+  function observeB2BCartSummary() {
+    if (state.cartSummaryObserver || !document.body) return;
+    state.cartSummaryObserver = new MutationObserver((mutations) => {
+      if (!state.isB2B || !state.lastCartSummary) return;
+      const relevant = mutations.some((mutation) => {
+        const target = mutation.target.nodeType === Node.TEXT_NODE
+          ? mutation.target.parentElement
+          : mutation.target;
+        return target?.closest?.(
+          '.cart_discounts-and-total, [sf-cart-subtotal-wrapper], .shipping-text, .shipping-line-front',
+        );
+      });
+      if (!relevant) return;
+      requestAnimationFrame(() => updateB2BCartSummary(state.lastCartSummary));
+    });
+    state.cartSummaryObserver.observe(document.body, { childList: true, subtree: true });
+  }
+
   function applyCartRules(cart) {
     const rawLines = cart?.lines?.nodes || cart?.lines?.edges || cart?.lines || cart?.items || cart?.lineItems || [];
     const lines = rawLines.map((line) => line?.node || line);
@@ -1424,6 +1560,8 @@
       );
     });
     updateCheckoutMinimum(cart);
+    updateB2BCartSummary(cart);
+    observeB2BCartSummary();
     updateTaxLabels();
   }
 
