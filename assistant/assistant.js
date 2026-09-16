@@ -360,7 +360,9 @@
     const context=element('section','product-context');context.setAttribute('aria-label','Aktionen zum aktuellen Produkt');
     const body=element('div','context-body');body.id='eq-context-body';
     const inner=element('div','context-inner');body.append(inner);context.append(body);
-    const title=element('div','context-title');inner.append(title);
+    const head=root.querySelector('.head');head.classList.add('product-head');
+    const title=head.querySelector('.brand');head.querySelector('.sub').textContent='Das siehst du dir gerade an.';
+    const image=element('img','context-image');image.alt='';image.setAttribute('aria-hidden','true');image.hidden=true;head.prepend(image);
     const actions=element('div','context-actions');inner.append(actions);
     function dialogButton(label,actionName) {
       const button=element('button','context-button',label);button.type='button';
@@ -375,12 +377,15 @@
     const cart=element('button','context-button','In den Warenkorb');cart.type='button';cart.onclick=()=>nativeAction('sf-add-to-cart');commerce.append(cart);
     const wish=element('button','context-button','♡ Merken');wish.type='button';wish.onclick=()=>nativeAction('sf-add-to-wishlist');commerce.append(wish);
     inner.append(shareControl(container));
-    inner.append(element('div','context-note','Menge und Variante wie auf der Produktseite.'));
-    const update=()=>{title.textContent='Zu diesem Produkt: '+(text(container.querySelector('[sf-show-title]'))||text(document.querySelector('h1')));cart.disabled=!nativeControl('sf-add-to-cart')||!window.Shopyflow?.currentProducts?.size;wish.disabled=!nativeControl('sf-add-to-wishlist')||!window.Shopyflow?.currentProducts?.size;const marked=nativeWishlistMarked();wish.textContent=marked?'♥ Gemerkt · Ansehen':'♡ Merken';wish.classList.toggle('is-saved',marked);wish.title=marked?'Bereits gemerkt – Wunschliste ansehen':'Dieses Produkt auf der Wunschliste merken';};
+    const update=()=>{title.textContent=text(container.querySelector('[sf-show-title]'))||text(document.querySelector('h1'));
+      const productImage=[...container.querySelectorAll('img')].find(img=>/^https:\/\//.test(img.currentSrc||img.src)&&!/(?:placeholder|\.svg(?:\?|$))/.test(img.currentSrc||img.src));
+      const source=productImage&&(productImage.currentSrc||productImage.src);if(source&&image.getAttribute('src')!==source){image.src=source;image.hidden=false;}
+      cart.disabled=!nativeControl('sf-add-to-cart')||!window.Shopyflow?.currentProducts?.size;wish.disabled=!nativeControl('sf-add-to-wishlist')||!window.Shopyflow?.currentProducts?.size;const marked=nativeWishlistMarked();wish.textContent=marked?'♥ Gemerkt · Ansehen':'♡ Merken';wish.classList.toggle('is-saved',marked);wish.title=marked?'Bereits gemerkt – Wunschliste ansehen':'Dieses Produkt auf der Wunschliste merken';};
     update();new MutationObserver(update).observe(container,{subtree:true,attributes:true,childList:true,characterData:true});
     window.addEventListener('ShopyflowReady',update);window.addEventListener('eyequipment:native-b2b-ready',update);
     const fold=element('button','context-toggle');fold.type='button';fold.setAttribute('aria-controls',body.id);
-    const setCollapsed=value=>{contextCollapsed=value;context.classList.toggle('is-collapsed',value);inner.inert=value;inner.setAttribute('aria-hidden',String(value));fold.setAttribute('aria-expanded',String(!value));fold.textContent=value?'Produktoptionen anzeigen ⌄':'Produktoptionen ausblenden ⌃';};
+    const foldLabel=element('span');const foldIcon=element('span','context-chevron');foldIcon.setAttribute('aria-hidden','true');foldIcon.innerHTML='<svg viewBox="0 0 16 16" fill="none"><path d="m4 10 4-4 4 4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>';fold.append(foldLabel,foldIcon);
+    const setCollapsed=value=>{contextCollapsed=value;context.classList.toggle('is-collapsed',value);inner.inert=value;inner.setAttribute('aria-hidden',String(value));fold.setAttribute('aria-expanded',String(!value));foldLabel.textContent=value?'Produktoptionen anzeigen':'Produktoptionen ausblenden';};
     setCollapsed(readSession()?.contextCollapsed===true);
     fold.onclick=()=>{setCollapsed(!contextCollapsed);saveSession();};context.append(fold);
     panel.insertBefore(context,feed);

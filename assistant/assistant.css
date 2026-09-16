@@ -75,7 +75,13 @@ button:focus-visible, a:focus-visible { outline: 3px solid #777; outline-offset:
 .card-price[hidden] { display:none; }
 
 .product-context { flex-shrink:0; margin:0; padding:12px 20px; background:#fff3e6; border-bottom:1px solid #e5d6c3; }
-.context-title { font-size:11px; font-weight:600; margin-bottom:8px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.product-head { position:relative; min-height:112px; flex-shrink:0; isolation:isolate; overflow:hidden; }
+.product-head .avatar { flex-shrink:0; position:relative; }
+.product-head .avatar + div { position:relative; flex:1; min-width:0; }
+.product-head .brand { font-size:26px; line-height:1.15; overflow-wrap:anywhere; }
+.product-head .sub { line-height:1.4; max-width:230px; }
+.context-image { position:absolute; z-index:-1; right:0; top:0; width:52%; height:100%; object-fit:cover; object-position:center; opacity:.85; mask-image:linear-gradient(to right,transparent,#000 65%); }
+.product-head .close { position:relative; background:#ffffffe6; }
 .context-actions { display:grid; gap:6px; grid-template-columns:1fr 1fr; }
 .context-button { border:1px solid #b9a38b; border-radius:10px; background:#fffaf4; padding:8px; font-size:11px; line-height:1.4; text-align:left; color:#171717; }
 .context-button:hover, .card-context:hover { background:#ffe8cc; }
@@ -88,13 +94,15 @@ button:focus-visible, a:focus-visible { outline: 3px solid #777; outline-offset:
 .group-heading { grid-column:1/-1; font-size:11px; font-weight:600; color:#666; margin:10px 0 2px; }
 @media(max-width:600px){ .product-context{padding:10px 16px;} }
 
-.context-note { font-size:10px; color:#796b5b; margin-top:6px; }
 
 .context-body { display:grid; grid-template-rows:1fr; transition:grid-template-rows .25s ease; }
 .context-inner { min-height:0; overflow:hidden; transition:opacity .2s ease, transform .25s ease; }
 .is-collapsed .context-body { grid-template-rows:0fr; }
 .is-collapsed .context-inner { opacity:0; transform:translateY(-12px); }
-.context-toggle { display:block; width:100%; margin-top:8px; padding:7px 0 0; border:0; border-top:1px solid #e5d6c3; background:transparent; color:#655746; font-size:11px; text-align:center; }
+.context-toggle { display:flex; align-items:center; justify-content:center; gap:5px; width:100%; margin-top:12px; padding:10px 0 0; border:0; border-top:1px solid #e5d6c3; background:transparent; color:#655746; font-size:11px; line-height:1.4; text-align:center; }
+.context-chevron { display:flex; align-items:center; flex:0 0 14px; }
+.context-chevron svg { width:14px; height:14px; }
+.is-collapsed .context-chevron { transform:rotate(180deg); }
 .context-toggle:hover { color:#171717; }
 .is-collapsed .context-toggle { margin-top:0; padding-top:0; border-top:0; }
 
