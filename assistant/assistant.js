@@ -430,42 +430,45 @@
     choices(items,0,'page-links');
   }
   function service() { bubble('Wobei brauchst du Hilfe?'); choices([{label:'Meine Bestellungen ansehen',url:findPage(/konto/i,'/konto')},...['Lieferung fehlt','Artikel beschädigt oder falsch','Rückgabe / Widerruf','Problem beim Bestellen','Problem mit dem Konto'].map(label=>({label,action:()=>contact(label)})),{label:'Versand & Serviceantworten',action:faq}]); }
-  function dealers() { bubble('Hier findest du die Händlerbereiche. Deine individuellen Preise, Mindestmengen und Standorte werden im angemeldeten Shop angezeigt.'); choices([{label:'Händler werden',url:findPage(/h.ndler/i,'/haendler-werden')},{label:'Zum Kundenkonto',url:findPage(/konto/i,'/konto')},{label:'Frage als Händler',action:()=>contact('Händleranfrage')}]); }
-  function contact(subject = 'Allgemeine Anfrage') {
+  function dealers() { bubble('Hier findest du die Händlerbereiche. Deine individuellen Preise, Mindestmengen und Standorte werden im angemeldeten Shop angezeigt.'); choices([{label:'Händler werden',primary:true,action:()=>contact('Händlerantrag',true)},{label:'Infos für Händler',secondary:true,url:findPage(/h.ndler/i,'/haendler-werden')},{label:'Zum Kundenkonto',url:findPage(/konto/i,'/konto')},{label:'Frage als Händler',action:()=>contact('Händleranfrage')}]); }
+  function contact(subject = 'Allgemeine Anfrage',dealer=false) {
     feed.querySelectorAll('iframe').forEach(frame=>frame.remove());
-    ticket++; bubble('Wir helfen dir gerne persönlich weiter. Schreib uns kurz, worum es geht. Wenn du lieber telefonieren möchtest, ergänze deine Nummer und einen Rückrufwunsch in der Nachricht.');
-    const url = safe(findPage(/kontakt/i,'/kontakt')); if (!url) return;
+    ticket++; bubble(dealer?'Schön, dass du eyequipment in deinem Store anbieten möchtest! Füll hier deinen Händlerantrag aus. Wir melden uns bei dir und klären gemeinsam die nächsten Schritte.':'Wir helfen dir gerne persönlich weiter. Schreib uns kurz, worum es geht. Wenn du lieber telefonieren möchtest, ergänze deine Nummer und einen Rückrufwunsch in der Nachricht.');
+    const url = safe(dealer?findPage(/h.ndler/i,'/haendler-werden'):findPage(/kontakt/i,'/kontakt')); if (!url) return;
     const loading=typing();
-    const frame=element('iframe','form-frame'); frame.title='eyequipment Kontaktformular'; frame.src=url.href; frame.style.height='1px';
+    const frame=element('iframe','form-frame'); frame.title=dealer?'eyequipment Händlerantrag':'eyequipment Kontaktformular'; frame.src=url.href; frame.style.height='1px';
     let prepared=false;
-    const timeout=setTimeout(()=>{if(!prepared&&frame.isConnected){frame.remove();loading.remove();bubble('Das Formular braucht gerade etwas länger. Du kannst es direkt auf der Kontaktseite öffnen.');}},15000);
+    const timeout=setTimeout(()=>{if(!prepared&&frame.isConnected){frame.remove();loading.remove();bubble('Das Formular braucht gerade etwas länger. Du kannst es direkt auf der Seite öffnen.');}},15000);
     frame.onload=()=>{
       if (prepared || !frame.isConnected) return;
       try {
         const doc=frame.contentDocument;
-        const form=[...doc.querySelectorAll('form')].find(f=>f.querySelector('input[type=email]')&&f.querySelector('textarea')&&!f.hasAttribute('sf-address-form'));
+        const form=[...doc.querySelectorAll('form')].find(f=>dealer?f.querySelector('.dealer-submit-native'):f.querySelector('input[type=email]')&&f.querySelector('textarea')&&!f.hasAttribute('sf-address-form'));
         if (!form) throw new Error('Formular fehlt');
         const wrapper=form.closest('.w-form'); if (!wrapper) throw new Error('Formularbereich fehlt');
         let branch=wrapper;
         while (branch.parentElement && branch.parentElement!==doc.documentElement) { [...branch.parentElement.children].forEach(sibling=>{if(sibling!==branch && !['SCRIPT','STYLE','LINK'].includes(sibling.tagName)) sibling.style.setProperty('display','none','important');}); branch=branch.parentElement; }
         const style=doc.createElement('style'); style.textContent='html,body{background:#fff!important;overflow:auto!important;min-height:0!important}body{padding:4px!important}.w-form{width:100%!important;max-width:none!important;margin:0!important}[data-eq-newsletter-promo],.cart-popup,.minimized,.mobile-product-banner,.custom-lightbox-overlay{display:none!important}.w-form input[type=submit]{max-width:100%!important;transform:none!important;scale:1!important;transition:background .2s,transform .15s!important}.w-form input[type=submit]:hover{background:#333!important}.w-form input[type=submit]:active{transform:scale(.98)!important}'; doc.head.append(style);
         let ancestor=wrapper.parentElement; while(ancestor&&ancestor!==doc.body){ancestor.style.cssText+=';display:block!important;padding:0!important;margin:0!important;width:100%!important;min-height:0!important;height:auto!important;transform:none!important;';ancestor=ancestor.parentElement;}
-        const labels=[...form.querySelectorAll('label')];
-        const subjectLabel=labels.find(l=>/betreff/i.test(text(l))); const field=subjectLabel&&doc.getElementById(subjectLabel.htmlFor);
-        const product=subject==='Produktfrage'?selected:null;
-        if(field)field.value=product?`Produktfrage zu ${product.title}`:subject;
-        const textarea=form.querySelector('textarea');
-        const reference=product?`Produkt: ${new URL(product.url,location.origin).href}`:`Seitenbezug: ${location.origin}${location.pathname}`;
-        textarea.value=`Hallo eyequipment-Team,\n\n${reference}\n\n${product?'Meine Frage':'Meine Nachricht'}:\n`;
-
+        wrapper.querySelectorAll('a[href]').forEach(a=>{const link=safe(a.getAttribute('href'),url.href);if(link){a.href=link.href;a.target='_blank';a.rel='noopener noreferrer';}});
+        if(dealer){const interest=form.querySelector('select[name=Interesse]');if(interest&&[...interest.options].some(option=>option.value==='Händler werden'))interest.value='Händler werden';}
+        else {
+          const labels=[...form.querySelectorAll('label')];
+          const subjectLabel=labels.find(l=>/betreff/i.test(text(l))); const field=subjectLabel&&doc.getElementById(subjectLabel.htmlFor);
+          const product=subject==='Produktfrage'?selected:null;
+          if(field)field.value=product?`Produktfrage zu ${product.title}`:subject;
+          const textarea=form.querySelector('textarea');
+          const reference=product?`Produkt: ${new URL(product.url,location.origin).href}`:`Seitenbezug: ${location.origin}${location.pathname}`;
+          textarea.value=`Hallo eyequipment-Team,\n\n${reference}\n\n${product?'Meine Frage':'Meine Nachricht'}:\n`;
+        }
         const resize=()=>{frame.style.height=`${Math.ceil(wrapper.getBoundingClientRect().height)+32}px`;}; resize();
         const observer=new frame.contentWindow.ResizeObserver(resize); observer.observe(wrapper);
         prepared=true;
         clearTimeout(timeout);
         requestAnimationFrame(()=>requestAnimationFrame(()=>{loading.remove();frame.classList.add('ready');}));
-      } catch { clearTimeout(timeout); loading.remove(); frame.remove(); bubble('Bitte öffne unser Kontaktformular direkt.'); }
+      } catch { clearTimeout(timeout); loading.remove(); frame.remove(); bubble(dealer?'Bitte öffne deinen Händlerantrag direkt auf der Händlerseite.':'Bitte öffne unser Kontaktformular direkt.'); }
     };
-    feed.append(frame); choices([{label:'Kontaktseite direkt öffnen',url:url.href}]); feed.scrollTop=Math.max(0,frame.offsetTop-feed.offsetTop-130);
+    feed.append(frame); choices([{label:dealer?'Händlerseite direkt öffnen':'Kontaktseite direkt öffnen',url:url.href}]); feed.scrollTop=Math.max(0,frame.offsetTop-feed.offsetTop-130);
   }
   let positionFrame=0;
   let pendingSession=null;

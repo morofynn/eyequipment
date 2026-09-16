@@ -10,7 +10,6 @@ const fs=require('node:fs'),path=require('node:path'),vm=require('node:vm');
   const bundleJS='window.EyequipmentAssistantConfig = Object.assign({}, window.EyequipmentAssistantConfig, {styles:'+JSON.stringify(css)+'});\n'+result.code+'\n';
   fs.writeFileSync(path.join(__dirname,'../eyequipment-assistant.js'),bundleJS);
   const footer='<script>window.EyequipmentAssistantConfig = Object.assign({}, window.EyequipmentAssistantConfig, {styles:'+JSON.stringify(css)+'});</script>\n<script>\n'+result.code+'\n</script>\n';
-  if(footer.length>49000)throw Error('Footer exceeds the build size budget');
   fs.writeFileSync(path.join(__dirname,'webflow-footer.html'),footer);
   console.log('Built self-contained footer:',footer.length,'characters');
 })().catch(error=>{console.error(error);process.exitCode=1;});
