@@ -281,7 +281,7 @@
       const reason=p.matchReason || (filters.Muster||filters.Farbe?'Passt zu deiner Auswahl'+(isBestseller(p)?' · Bestseller':''):isBestseller(p)?'Ein Bestseller aus unserem Sortiment':'Ein Design aus '+(p.productType||'unserem Sortiment'));
       body.append(element('p','card-reason',reason));
       const price=element('p','card-price','Ab '+new Intl.NumberFormat('de-DE',{style:'currency',currency:money.currencyCode}).format(Number(money.amount)));price.hidden=document.documentElement.dataset.nativeB2b!=='false';body.append(price);
-      body.append(element('p','',p.availableForSale?'Für dich erhältlich':'Gerade vergriffen')); link.append(body); card.append(link);
+      if(!p.availableForSale)body.append(element('p','card-availability','Aktuell ausverkauft')); link.append(body); card.append(link);
       const info=element('button','info','i'); info.type='button'; info.setAttribute('aria-label',`Informationen zu ${p.title}`);
       info._step={label:`Mehr über ${p.title}`,kind:'info'};
       info._action=()=>{selected=p;const details=productInformation(p);choices([{label:'Eine Frage zu diesem Produkt schreiben',action:()=>contact('Produktfrage')},{label:'Anwendung & Pflege',action:faq}]);if(!restoring)requestAnimationFrame(()=>{feed.scrollTop+=details.getBoundingClientRect().top-feed.getBoundingClientRect().top-20;});};
