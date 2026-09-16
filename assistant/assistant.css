@@ -49,6 +49,7 @@ button:focus-visible, a:focus-visible { outline: 3px solid #777; outline-offset:
   .orb::before { animation: pulse 2.2s ease-in-out infinite; }
   .orb::after { animation: ripple 2.2s ease-out infinite; }
   .panel, .bubble, .card { animation: appear .24s ease-out backwards; }
+  .panel.is-closing { animation: disappear .24s ease-in forwards; pointer-events:none; }
   .choice { animation: appear .24s ease-out backwards; animation-delay: var(--delay, 0ms); }
   .typing span { animation: dots .95s ease-in-out infinite; }
   .typing span:nth-child(2) { animation-delay: .15s; }
@@ -57,12 +58,18 @@ button:focus-visible, a:focus-visible { outline: 3px solid #777; outline-offset:
   @keyframes ripple { 0% { transform: scale(.8); opacity: .4; } 80%,100% { transform: scale(1.4); opacity: 0; } }
   @keyframes dots { 0%,60%,100% { transform: translateY(0); opacity: .45; } 30% { transform: translateY(-4px); opacity: 1; } }
   @keyframes appear { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+  @keyframes disappear { from { opacity:1; transform:translateY(0); } to { opacity:0; transform:translateY(8px); } }
 }
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation: none !important; transition: none !important; scroll-behavior: auto !important; } }
 .foot { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
 .foot button[hidden], .feed[hidden] { display: none; }
 .foot .restart { margin-left: auto; }
 .foot button:disabled { opacity: .4; cursor: default; }
+.foot button { display:inline-flex; align-items:center; justify-content:center; gap:6px; padding:8px 10px; border-radius:9px; font-size:12px; line-height:1.4; transition:background .18s,color .18s,transform .18s; }
+.foot button svg { width:16px; height:16px; flex:0 0 16px; }
+.foot button:hover:not(:disabled) { background:#fff3e6; color:#171717; }
+.foot button:active:not(:disabled) { transform:translateY(1px); }
+@media(max-width:360px){.foot{gap:6px;padding:10px 12px;}.foot button{padding:8px 5px;gap:5px;font-size:11px;}}
 .resume-status { flex: 1; display: grid; place-items: center; padding: 24px; color: #666; font-size: 13px; }
 
 .selection { grid-template-columns: repeat(2,minmax(0,1fr)); padding: 12px; border-radius: 16px; background: #f7f5f2; }
@@ -122,6 +129,10 @@ button:focus-visible, a:focus-visible { outline: 3px solid #777; outline-offset:
 .context-button.is-saved:hover { background:#333; }
 
 .close { width:32px; height:32px; min-width:32px; padding:0; flex:0 0 32px; display:grid; place-items:center; line-height:1; aspect-ratio:1; }
+.close { transition:background .18s,color .18s,transform .18s; }
+.close:hover { background:#171717; color:#fff; }
+.product-head .close:hover { background:#171717; color:#fff; }
+.close:active { transform:scale(.94); }
 .panel:focus { outline:none; }
 
 .close:focus-visible { outline:none; }

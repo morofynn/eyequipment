@@ -55,7 +55,7 @@
   }
   function saveSession() {
     if (restoring || !feed.childElementCount) return;
-    try { sessionStorage.setItem(sessionKey,JSON.stringify({version:3,updated:Date.now(),open:!panel.hidden,contextCollapsed,steps,scroll:feed.scrollTop,selected:selected?{title:selected.title,url:selected.url}:null})); } catch {}
+    try { sessionStorage.setItem(sessionKey,JSON.stringify({version:3,updated:Date.now(),open:panelOpen,contextCollapsed,steps,scroll:feed.scrollTop,selected:selected?{title:selected.title,url:selected.url}:null})); } catch {}
   }
   function scheduleSave() { clearTimeout(saveTimer); saveTimer=setTimeout(saveSession,120); }
   const findPage = (pattern, fallback) => nav.find(n => pattern.test(n.title + ' ' + n.url))?.url || fallback;
@@ -63,10 +63,11 @@
   host.style.cssText = 'position:relative;z-index:90;';
   host.style.setProperty('--eq-assistant-font', getComputedStyle(document.body).fontFamily);
   const root = host.attachShadow({ mode: 'open' });
-  root.innerHTML = `<link rel="stylesheet" href="${new URL('assistant.css', assets).href}"><button class="launcher" aria-label="eyequipment Assistent öffnen" aria-expanded="false" aria-controls="eq-panel"><span class="orb" aria-hidden="true"></span><span class="launcher-label">Frag eyequipment</span><span class="notification-badge" hidden aria-hidden="true">1</span></button><section class="panel" id="eq-panel" role="dialog" tabindex="-1" aria-label="eyequipment Assistent" hidden><header class="head"><span class="avatar" aria-hidden="true"><span class="orb"></span></span><div><div class="brand">eyequipment</div><div class="sub">Schön, dass du da bist.</div></div><button class="close" aria-label="Schließen">×</button></header><div class="feed" aria-live="polite" aria-relevant="additions"></div><footer class="foot"><button class="back" hidden>Zurück</button><button class="restart">Noch mal von vorne</button></footer></section>`;
+  root.innerHTML = `<link rel="stylesheet" href="${new URL('assistant.css', assets).href}"><button class="launcher" aria-label="eyequipment Assistent öffnen" aria-expanded="false" aria-controls="eq-panel"><span class="orb" aria-hidden="true"></span><span class="launcher-label">Frag eyequipment</span><span class="notification-badge" hidden aria-hidden="true">1</span></button><section class="panel" id="eq-panel" role="dialog" tabindex="-1" aria-label="eyequipment Assistent" hidden><header class="head"><span class="avatar" aria-hidden="true"><span class="orb"></span></span><div><div class="brand">eyequipment</div><div class="sub">Schön, dass du da bist.</div></div><button class="close" aria-label="Schließen">×</button></header><div class="feed" aria-live="polite" aria-relevant="additions"></div><footer class="foot"><button class="back" hidden><svg aria-hidden="true" viewBox="0 0 20 20" fill="none"><path d="m8 5-5 5 5 5M3 10h14" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg><span>Zurück</span></button><button class="restart"><svg aria-hidden="true" viewBox="0 0 20 20" fill="none"><path d="M4 7a7 7 0 1 1-.7 6M4 3v4h4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg><span>Noch mal von vorne</span></button></footer></section>`;
   if (config.styles) { root.querySelector('link').remove(); const style = document.createElement('style'); style.textContent = config.styles; root.prepend(style); }
   document.body.append(host);
   const feed = root.querySelector('.feed'), panel = root.querySelector('.panel'), launcher = root.querySelector('.launcher');
+  let panelOpen=false,closeTimer=0;
   function element(tag, cls, content) { const el = document.createElement(tag); if (cls) el.className = cls; if (content) el.textContent = content; return el; }
   function bubble(content, user = false) { feed.append(element('div', user ? 'bubble user' : 'bubble', content)); feed.scrollTop = feed.scrollHeight; }
   function productInformation(p) {
@@ -112,7 +113,7 @@
     let signedIn=false;try{const auth=JSON.parse(stored('_sf_oauth_tokens')||'null');signedIn=!!auth?.tokens?.access_token&&Number(auth.expiresAt)>Date.now();}catch{}
     return !signedIn||/noch nicht angemeldet|Jetzt abonnieren/.test(statuses);
   }
-  function updateBadge(){badge.hidden=!panel.hidden||!(welcomeUnread&&welcomeArrived||newsletterPending);if(panel.hidden)launcher.setAttribute('aria-label','eyequipment Assistent öffnen'+(!badge.hidden?' – neue Nachricht':''));}
+  function updateBadge(){badge.hidden=panelOpen||!(welcomeUnread&&welcomeArrived||newsletterPending);if(!panelOpen)launcher.setAttribute('aria-label','eyequipment Assistent öffnen'+(!badge.hidden?' – neue Nachricht':''));}
   function newsletterInvite(){
     if(restoring){more();return;}
     newsletterPending=false;try{sessionStorage.removeItem(pendingNewsletterKey);}catch{}updateBadge();if(!newsletterEligible())return;
@@ -123,7 +124,7 @@
     yes.onclick=()=>{remember(newsletterKey,Date.now()+86400000);invitation.remove();openNewsletter();};
     no.onclick=()=>{remember(newsletterKey,Date.now()+86400000);invitation.replaceChildren(element('p','','Alles klar! Viel Freude beim Stöbern.'));if(!feed.querySelector('.choices'))more();};buttons.append(yes,no);invitation.append(buttons);feed.append(invitation);feed.scrollTop=feed.scrollHeight;
   }
-  async function openedNotification(){welcomeUnread=false;remember(welcomeKey,1);updateBadge();if(newsletterPending){while(restoring)await new Promise(resolve=>setTimeout(resolve,100));if(!panel.hidden)newsletterInvite();}}
+  async function openedNotification(){welcomeUnread=false;remember(welcomeKey,1);updateBadge();if(newsletterPending){while(restoring)await new Promise(resolve=>setTimeout(resolve,100));if(panelOpen)newsletterInvite();}}
   let visit={start:Date.now(),last:Date.now(),notified:false};
   try{const previous=JSON.parse(sessionStorage.getItem(visitKey)||'null');if(previous&&Number.isFinite(previous.start)&&Date.now()-previous.last<30*60000)visit=previous;}catch{}
   function touchVisit(){visit.last=Date.now();try{sessionStorage.setItem(visitKey,JSON.stringify(visit));}catch{}}
@@ -139,7 +140,7 @@
     if(!remember(newsletterKey,Date.now()+86400000))return;
     visit.notified=true;touchVisit();newsletterPending=true;
     try{sessionStorage.setItem(pendingNewsletterKey,'1');}catch{}
-    if(panel.hidden)updateBadge();else newsletterInvite();
+    if(!panelOpen)updateBadge();else newsletterInvite();
   }
   setTimeout(newsletterNudge,Math.max(0,30000-(Date.now()-visit.start)));
   setInterval(()=>{if(!document.hidden)touchVisit();newsletterNudge();},5000);
@@ -499,15 +500,15 @@
     } finally {
       status.remove(); feed.hidden=false; feed.setAttribute('aria-live','polite'); restoring=false; resumePages.clear();
       root.querySelector('.restart').disabled=false; root.querySelector('.back').disabled=false; root.querySelector('.back').hidden=!steps.length;
-      requestAnimationFrame(()=>{feed.scrollTop=Number.isFinite(state.scroll)?state.scroll:feed.scrollHeight;if(!panel.hidden)panel.focus({preventScroll:true});saveSession();});
+      requestAnimationFrame(()=>{feed.scrollTop=Number.isFinite(state.scroll)?state.scroll:feed.scrollHeight;if(panelOpen)panel.focus({preventScroll:true});saveSession();});
     }
   }
   function position() {
-    positionFrame=0; host.style.zIndex=panel.hidden?'90':'100000';
+    positionFrame=0; host.style.zIndex=!panelOpen?'90':'100000';
     const footer=document.querySelector('footer, .footer, [data-eq-footer]');
     const banner=document.querySelector('.mobile-product-banner'); const bannerRect=banner?.getBoundingClientRect();
     const covered=!!bannerRect && getComputedStyle(banner).display!=='none' && getComputedStyle(banner).visibility!=='hidden' && Number(getComputedStyle(banner).opacity)>0 && bannerRect.top<innerHeight-16 && bannerRect.bottom>innerHeight-70 && bannerRect.right>innerWidth-70;
-    const hidden=panel.hidden && ((!!footer && footer.getBoundingClientRect().top<innerHeight-16)||covered);
+    const hidden=!panelOpen && ((!!footer && footer.getBoundingClientRect().top<innerHeight-16)||covered);
     launcher.classList.toggle('footer-hidden',hidden); launcher.inert=hidden;
   }
   function schedulePosition() { if(!positionFrame)positionFrame=requestAnimationFrame(position); }
@@ -515,12 +516,23 @@
   const footer=document.querySelector('footer, .footer, [data-eq-footer]'); if(footer)new IntersectionObserver(schedulePosition).observe(footer);
   const banner=document.querySelector('.mobile-product-banner'); if(banner)new MutationObserver(schedulePosition).observe(banner,{attributes:true,attributeFilter:['style','class','hidden']});
   if(banner)banner.addEventListener('transitionend',schedulePosition);
-  function toggle(open) { panel.hidden=!open; launcher.setAttribute('aria-expanded',String(open)); launcher.setAttribute('aria-label',open?'eyequipment Assistent schließen':'eyequipment Assistent öffnen'); position(); if(open){ if(pendingSession){const state=pendingSession;pendingSession=null;restore({...state,open:true});}else if(!restoring&&!feed.childElementCount)home();openedNotification();panel.focus({preventScroll:true});}else if(!launcher.inert)launcher.focus(); saveSession(); }
-  launcher.onclick=()=>toggle(panel.hidden); root.querySelector('.close').onclick=()=>toggle(false);
+  function toggle(open) {
+    const wasOpen=panelOpen;panelOpen=open;clearTimeout(closeTimer);panel.inert=!open;
+    if(open){panel.classList.remove('is-closing');panel.hidden=false;}
+    else if(!panel.hidden&&!matchMedia('(prefers-reduced-motion: reduce)').matches){
+      panel.classList.add('is-closing');closeTimer=setTimeout(()=>{if(!panelOpen){panel.hidden=true;panel.classList.remove('is-closing');position();}},240);
+    }else{panel.hidden=true;panel.classList.remove('is-closing');}
+    launcher.setAttribute('aria-expanded',String(open));launcher.setAttribute('aria-label',open?'eyequipment Assistent schließen':'eyequipment Assistent öffnen');
+    position();updateBadge();
+    if(open){if(pendingSession){const state=pendingSession;pendingSession=null;restore({...state,open:true});}else if(!restoring&&!feed.childElementCount)home();openedNotification();panel.focus({preventScroll:true});}
+    else if(wasOpen&&!launcher.inert)launcher.focus();
+    saveSession();
+  }
+  launcher.onclick=()=>toggle(!panelOpen); root.querySelector('.close').onclick=()=>toggle(false);
   root.querySelector('.restart').onclick=()=>respond('Noch mal von vorne',home);
-  root.querySelector('.back').onclick=()=>restore({open:!panel.hidden,steps:steps.slice(0,-1)});
+  root.querySelector('.back').onclick=()=>restore({open:panelOpen,steps:steps.slice(0,-1)});
   feed.addEventListener('scroll',scheduleSave,{passive:true}); window.addEventListener('pagehide',saveSession);
-  window.addEventListener('pageshow',async event=>{panel.classList.remove('keyboard-navigation');if(event.persisted){const saved=readSession();if(saved&&!restoring)await restore(saved);}requestAnimationFrame(()=>{if(!panel.hidden)panel.focus({preventScroll:true});});});
+  window.addEventListener('pageshow',async event=>{panel.classList.remove('keyboard-navigation');if(event.persisted){const saved=readSession();if(saved&&!restoring)await restore(saved);}requestAnimationFrame(()=>{if(panelOpen)panel.focus({preventScroll:true});});});
   root.addEventListener('pointerdown',()=>panel.classList.remove('keyboard-navigation'));
   root.addEventListener('keydown',e=>{if(e.key==='Tab')panel.classList.add('keyboard-navigation');if(e.key==='Escape')toggle(false);});
   ['eyequipment:b2b-update','eyequipment:native-b2b-ready','ShopyflowReady'].forEach(event=>window.addEventListener(event,()=>{catalog=null;feed.querySelectorAll('.card-price').forEach(p=>p.hidden=document.documentElement.dataset.nativeB2b!=='false');}));
