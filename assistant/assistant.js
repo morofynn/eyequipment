@@ -48,7 +48,7 @@
   function readSession() {
     try {
       const state = JSON.parse(sessionStorage.getItem(sessionKey));
-      if (state?.version !== 3 || !Number.isFinite(state.updated) || typeof state.open!=='boolean' || Date.now()-state.updated > 30*60*1000 || !Array.isArray(state.steps) || state.steps.length > 128 || state.steps.some(s=>!['choice','info','more','context'].includes(s.kind)||typeof s.label!=='string'||s.label.length>200||(s.kind==='context'&&(!/^\d+$/.test(s.productId||'')||!['related','question'].includes(s.action))))) return null;
+      if (state?.version !== 3 || !Number.isFinite(state.updated) || typeof state.open!=='boolean' || Date.now()-state.updated > 30*60*1000 || !Array.isArray(state.steps) || state.steps.length > 128 || state.steps.some(s=>!['choice','info','more','context'].includes(s.kind)||(s.orderSeed!==undefined&&(!Number.isInteger(s.orderSeed)||s.orderSeed<1||s.orderSeed>4294967295))||typeof s.label!=='string'||s.label.length>200||(s.kind==='context'&&(!/^\d+$/.test(s.productId||'')||!['related','question'].includes(s.action))))) return null;
       const aliases={'Passende Ergänzung finden':'Match finden','Passende Kombination finden':'Ein Match finden','Andere Kombination finden':'Anderes Match finden','Passende Kombination dazu':'Match dazu finden'};
       return {...state,steps:state.steps.map(step=>({...step,label:aliases[step.label]||step.label.replace(/^Kombination für /,'Match für ')}))};
     } catch { return null; }
@@ -156,7 +156,7 @@
     if(!restoring&&kind!=='more'&&label!=='Noch mal von vorne'&&feed.querySelector('.typing'))return;
     const id=++ticket;
     feed.querySelectorAll('.choices, .chips').forEach(group=>group.remove());
-    steps.push({label,kind,...detail});
+    steps.push({label,kind,...detail,orderSeed:detail.orderSeed??(restoring?1:Math.floor(Math.random()*4294967295)+1)});
     root.querySelector('.back').hidden=!steps.length;
     if(kind!=='more')bubble(label,true);
     if(!restoring){ const dots=typing(); await new Promise(resolve=>setTimeout(resolve,reducedMotion()?0:380)); dots.remove(); }
@@ -238,7 +238,15 @@
   }
   const isBestseller = p=>p.tags.some(tag=>/^bestseller$/i.test(tag));
   async function bestsellers() { const items=await task(loadCatalog); if(items)showProducts(rank(items.filter(isBestseller)),0,null,{Highlights:'bestseller'}); }
-  function rank(items) { return [...items].sort((a,b)=>Number(b.availableForSale)-Number(a.availableForSale)||Number(b.tags.some(t=>/^bestseller$/i.test(t)))-Number(a.tags.some(t=>/^bestseller$/i.test(t)))); }
+  function rank(items) {
+    const shuffled=[...items].sort((a,b)=>a.id.localeCompare(b.id));
+    let seed=steps.at(-1)?.orderSeed||1;
+    const random=()=>{seed^=seed<<13;seed^=seed>>>17;seed^=seed<<5;return(seed>>>0)/4294967296;};
+    for(let i=shuffled.length-1;i>0;i--){const j=Math.floor(random()*(i+1));[shuffled[i],shuffled[j]]=[shuffled[j],shuffled[i]];}
+    // Shuffle once per suggestion action. Pagination reuses this exact array,
+    // and saved action seeds reproduce it after reload or back navigation.
+    return shuffled.sort((a,b)=>Number(b.availableForSale)-Number(a.availableForSale));
+  }
   function preference(items,type,filters={},step=0) {
     const name=step===0?'Muster':'Farbe';
     const values=[...new Set(items.flatMap(p=>attributes(p,name)))].sort((a,b)=>a.localeCompare(b,'de'));
@@ -471,11 +479,11 @@
       home();
       for(const step of state.steps) {
         if(step.kind==='context') {
-          await respond(step.label,async()=>{const all=await task(loadCatalog);if(!all)return;const product=all.find(p=>p.id.split('/').pop()===step.productId);if(!product){bubble('Das frühere Produkt ist nicht mehr verfügbar.');return choices([{label:'Lieblingsdesign finden',primary:true,action:discover}]);}selected=product;return step.action==='related'?relatedTo(product):contact('Produktfrage');},'context',{productId:step.productId,action:step.action});continue;
+          await respond(step.label,async()=>{const all=await task(loadCatalog);if(!all)return;const product=all.find(p=>p.id.split('/').pop()===step.productId);if(!product){bubble('Das frühere Produkt ist nicht mehr verfügbar.');return choices([{label:'Lieblingsdesign finden',primary:true,action:discover}]);}selected=product;return step.action==='related'?relatedTo(product):contact('Produktfrage');},'context',{productId:step.productId,action:step.action,orderSeed:step.orderSeed});continue;
         }
         const button=[...feed.querySelectorAll('button')].find(el=>el._step?.kind===step.kind&&el._step?.label===step.label);
         if(!button){bubble('Ein Inhalt hat sich inzwischen geändert. Lass uns von hier aus weitermachen.');choices([{label:'Lieblingsdesign finden',primary:true,action:discover},{label:'Eine Frage klären',action:help}]);break;}
-        await respond(step.label,button._action,step.kind);
+        await respond(step.label,button._action,step.kind,{orderSeed:step.orderSeed});
       }
       if(state.selected && typeof state.selected.title==='string' && state.selected.title.length<=200 && safe(state.selected.url))selected={title:state.selected.title,url:safe(state.selected.url).pathname};
     } finally {
