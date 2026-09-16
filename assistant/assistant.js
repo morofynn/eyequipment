@@ -295,6 +295,7 @@
       }
       feed.append(card);
     });
+    if(filters.Kombination&&displayed.length===2)matchCart(displayed);
     choices([...(!filters.Kombination&&offset+3<items.length?[{label:'Zeig mir noch ein paar',action:()=>showProducts(items,offset+3,type,filters)}]:[]),{label:filters.Kombination?'Im Shop weiterstöbern':'Alle passenden Designs im Shop',url:filters.Kombination?shopLink(items[0].productType==='Tücher'?'Mäppchen':'Tücher'):shopLink(type,filters)},{label:filters.Kombination?'Anderes Match finden':'Match dazu finden',action:()=>filters.Kombination?products(true):chooseCombination(displayed,type,filters)},{label:'Meine Auswahl ändern',action:()=>products(true)}]);
     feed.scrollTop=start;
   }
@@ -306,6 +307,63 @@
   async function relatedTo(product) {
     selected=product;bubble(`Ich suche ein Match zu „${product.title}“ – ${product.productType==='Tücher'?'ein Mäppchen':'ein Tuch'}, das dazu passt.`);
     return showProducts([product],0,null,{Kombination:true});
+  }
+  let matchBuying=false;
+  async function matchCart(pair){
+    const box=element('section','match-cart');box.setAttribute('aria-label','Beide Match-Produkte kaufen');
+    box.append(element('div','group-heading','Dein Match zusammen bestellen'));
+    const summary=element('p','match-summary',pair.map(p=>`${p.title} (${p.productType})`).join(' + '));box.append(summary);
+    const status=element('p','note','Produktoptionen werden geladen …');status.setAttribute('role','status');box.append(status);
+    const button=element('button','choice choice-primary match-cart-button');button.type='button';button.disabled=true;
+    const icon=element('span','match-cart-icon');icon.setAttribute('aria-hidden','true');icon.innerHTML='<svg viewBox="0 0 24 24" fill="none"><path d="M3 4h2l2 12h11l3-8H6M9 20h.01M18 20h.01" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+    const buttonLabel=element('span','','Beide in den Warenkorb');button.append(icon,buttonLabel);box.append(button);feed.append(box);
+    const selections=[];
+    try{
+      const readyStart=Date.now();while(!window.Shopyflow?.fetchNew||!window.Shopyflow?.addToCart){if(Date.now()-readyStart>15000)throw Error('Der Warenkorb wird noch geladen.');await new Promise(resolve=>setTimeout(resolve,100));}
+      const sdk=window.Shopyflow;
+      let bridge=document.querySelector('[data-eq-assistant-match-products]');
+      if(!bridge){bridge=document.createElement('div');bridge.hidden=true;bridge.setAttribute('data-eq-assistant-match-products','');document.body.append(bridge);}
+      for(const product of pair){const id=product.id.split('/').pop();if(![...bridge.children].some(el=>el.getAttribute('sf-product')===id)){const module=document.createElement('div');module.setAttribute('sf-product',id);bridge.append(module);}}
+      await sdk.fetchNew();
+      const start=Date.now();while(pair.some(p=>!sdk.currentProducts?.get(p.id.split('/').pop())?.variants?.length)){if(Date.now()-start>15000)throw Error('Produktoptionen konnten nicht geladen werden.');await new Promise(resolve=>setTimeout(resolve,100));}
+      const b2b=window.EyequipmentNativeB2B;await b2b?.ensureStatus?.();const wasB2B=!!b2b?.isB2B;
+      if(b2b?.switching||b2b?.cartContextError||b2b?.statusError)throw Error('Der Warenkorb ist noch nicht bereit.');
+      for(const [index,product] of pair.entries()){
+        const native=sdk.currentProducts.get(product.id.split('/').pop());
+        if(native.requiresSellingPlan)throw Error('Bitte wähle die Kaufoption auf der Produktseite.');
+        const rules=b2b?.isB2B?await b2b.getMatchVariants(product.id):[];
+        const variants=native.variants.filter(v=>v.availableForSale).map(v=>({...v,quantityRule:rules.find(rule=>rule.id===v.id)?.quantityRule||v.quantityRule}));
+        if(!variants.length||b2b?.isB2B&&variants.some(v=>!v.quantityRule))throw Error('Dieses Match ist gerade nicht direkt bestellbar.');
+        const row=element('div','match-option'),label=element('label','',`${product.title} · ${product.productType}`);row.append(label);
+        const select=element('select');select.id=`eq-match-${Date.now()}-${index}`;label.htmlFor=select.id;
+        variants.forEach(v=>{const option=element('option','',v.title==='Default Title'?product.productType:v.title);option.value=v.id;select.append(option);});
+        if(variants.length>1)row.append(select);
+        const quantity=element('span','match-quantity');row.append(quantity);box.insertBefore(row,status);
+        const chosen=()=>variants.find(v=>v.id===select.value),amount=()=>{const rule=chosen().quantityRule,step=Math.max(1,Number(rule?.increment)||1);return Math.ceil(Math.max(1,Number(rule?.minimum)||1)/step)*step;};
+        const update=()=>{quantity.textContent=`${amount()} ×`;};select.onchange=update;update();selections.push({chosen,amount});
+      }
+      status.textContent=b2b?.isB2B?'Die Händler-Mindestmenge gilt je Produkt.':'Je ein Produkt – ein Tuch und ein Mäppchen.';button.disabled=false;
+      // Commerce actions are deliberately outside replayable chat choices.
+      button.onclick=async()=>{
+        if(restoring||matchBuying||button.disabled)return;matchBuying=true;button.disabled=true;buttonLabel.textContent='Wird hinzugefügt …';
+        try{
+          const current=window.EyequipmentNativeB2B;await current?.ensureStatus?.();
+          if(current?.switching||current?.cartContextError||current?.statusError||!!current?.isB2B!==wasB2B)throw Error('Warenkorbstatus hat sich geändert.');
+          const lineItems=[];
+          for(const [index,selection] of selections.entries()){
+            const variant=selection.chosen();let quantity=selection.amount();
+            if(current?.isB2B){const fresh=(await current.getMatchVariants(pair[index].id)).find(v=>v.id===variant.id)?.quantityRule;if(!fresh)throw Error('Mengenregel fehlt.');const step=Math.max(1,Number(fresh.increment)||1);quantity=Math.ceil(Math.max(1,Number(fresh.minimum)||1)/step)*step;if(quantity!==selection.amount())throw Error('Die Mindestmenge hat sich geändert. Bitte suche dein Match erneut.');if(fresh.maximum!=null&&quantity>Number(fresh.maximum))throw Error('Dieses Produkt ist gerade nicht in ausreichender Menge bestellbar.');}
+            lineItems.push({merchandiseId:variant.id,quantity});
+          }
+          const quantities=()=>{const raw=sdk._cart?.lines;const lines=Array.isArray(raw)?raw:raw?.nodes||raw?.edges?.map(e=>e.node)||[];return lineItems.map(item=>lines.filter(line=>line.merchandise?.id===item.merchandiseId).reduce((sum,line)=>sum+Number(line.quantity||0),0));};
+          const before=quantities();await sdk.addToCart({lineItems,useShopifyId:true,getNewCart:false});
+          const after=quantities();if(lineItems.some((item,index)=>after[index]<before[index]+item.quantity))throw Error('Warenkorb-Ergebnis nicht bestätigt.');
+          buttonLabel.textContent='Im Warenkorb ansehen';button.disabled=false;status.textContent='Dein Match wurde zum Warenkorb hinzugefügt.';
+          button.onclick=()=>{toggle(false);sdk.openCart?.();};toggle(false);sdk.openCart?.();
+        }catch{buttonLabel.textContent='Warenkorb prüfen';button.disabled=false;status.textContent='Das Hinzufügen konnte nicht bestätigt werden. Bitte prüfe deinen Warenkorb, bevor du es erneut versuchst.';button.onclick=()=>{toggle(false);sdk.openCart?.();};}
+        finally{matchBuying=false;}
+      };
+    }catch(error){status.textContent=error.message+' Du kannst beide Produkte über ihre Produktseiten bestellen.';button.hidden=true;}
   }
   const productContainer=()=>location.pathname.startsWith('/products/')?document.querySelector('.product-container[sf-product]'):null;
   function nativeControl(attribute){return productContainer()?.querySelector(`[${attribute}]`);}

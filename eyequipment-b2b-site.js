@@ -1207,6 +1207,15 @@
   }
 
   state.ensureStatus = ensureStatus;
+  // Read the same contextual variants used by native product modules.
+  state.getMatchVariants = async function(productId) {
+    if (!(await ensureStatus()) || state.switching || state.cartContextError || state.statusError) {
+      throw new Error('Der Händler-Warenkorb ist noch nicht bereit.');
+    }
+    const product = await fetchContextualNode(productId);
+    if (!product?.variants?.nodes?.length) throw new Error('Händler-Produktdaten fehlen.');
+    return product.variants.nodes;
+  };
   state.selectCompanyLocation = async function(locationId) {
     if (state.switching) throw new Error('Der Standortwechsel läuft bereits.');
     await ensureStatus();
