@@ -120,7 +120,7 @@
     const invitation=element('div','bubble newsletter-invitation');invitation.append(element('p','','Lust auf neue Designs und Inspiration? Mit unserem Newsletter bleibst du auf dem Laufenden. Möchtest du dich anmelden?'));
     const buttons=element('div','newsletter-actions');
     const yes=element('button','choice choice-primary','Ja, gerne'),no=element('button','choice choice-secondary','Gerade nicht');yes.type=no.type='button';
-    yes.onclick=()=>{remember(newsletterKey,Date.now()+86400000);invitation.remove();toggle(false);if(window.EyequipmentNewsletterPopup?.open)window.EyequipmentNewsletterPopup.open();else location.href=findPage(/konto/i,'/konto')+'?newsletter=1#konto-newsletter';};
+    yes.onclick=()=>{remember(newsletterKey,Date.now()+86400000);invitation.remove();openNewsletter();};
     no.onclick=()=>{remember(newsletterKey,Date.now()+86400000);invitation.replaceChildren(element('p','','Alles klar! Viel Freude beim Stöbern.'));if(!feed.querySelector('.choices'))more();};buttons.append(yes,no);invitation.append(buttons);feed.append(invitation);feed.scrollTop=feed.scrollHeight;
   }
   async function openedNotification(){welcomeUnread=false;remember(welcomeKey,1);updateBadge();if(newsletterPending){while(restoring)await new Promise(resolve=>setTimeout(resolve,100));if(!panel.hidden)newsletterInvite();}}
@@ -184,7 +184,8 @@
   }
   function discover(){bubble('Wie möchtest du dein Lieblingsdesign entdecken?');choices([{label:'Was passt zu mir?',action:()=>products(true)},{label:'Bestseller entdecken',action:bestsellers},{label:'Alle Designs entdecken',action:()=>products()},{label:'Meine gemerkten Designs',secondary:true,url:findPage(/wunschliste/i,'/wunschliste')}]);}
   function help(){bubble('Worum geht es? Ich zeige dir den passenden Weg.');choices([{label:'Anwendung, Pflege & Service',action:faq},{label:'Bestellung oder Problem',action:service},{label:location.pathname.includes('/products/')?'Frage zu diesem Produkt':'Eine Nachricht schreiben',action:()=>{if(location.pathname.includes('/products/'))selected={title:text(document.querySelector('h1')),url:location.pathname};contact(selected?'Produktfrage':'Allgemeine Anfrage');}}]);}
-  function more(){bubble('Was möchtest du noch entdecken?');const instagram=instagramLink();choices([{label:'Für Händler',heading:'Weitere Wege',action:dealers},{label:'Seite finden',action:pages},{label:'Über eyequipment',heading:'Inspiration & eyequipment',url:findPage(/.ber-uns/i,'/ueber-uns')},...(instagram?[{label:'Inspiration auf Instagram ↗',url:instagram,external:true}]:[]),...(newsletterEligible()?[{label:'Newsletter entdecken',secondary:true,action:newsletterInvite}]:[])]);}
+  function openNewsletter(){if(restoring){more();return;}toggle(false);if(window.EyequipmentNewsletterPopup?.open)window.EyequipmentNewsletterPopup.open();else location.href='/?eq_newsletter=1';}
+  function more(){bubble('Was möchtest du noch entdecken?');const instagram=instagramLink();choices([{label:'Für Händler',heading:'Weitere Wege',action:dealers},{label:'Seite finden',action:pages},{label:'Über eyequipment',heading:'Inspiration & eyequipment',url:findPage(/.ber-uns/i,'/ueber-uns')},...(instagram?[{label:'Inspiration auf Instagram ↗',url:instagram,external:true}]:[]),{label:'Newsletter',secondary:true,action:openNewsletter}]);}
   async function task(work) {
     const id = ++ticket, loading = typing();
     try { const result = await work(); loading.remove(); return id === ticket ? result : undefined; }
@@ -523,7 +524,30 @@
   pendingSession=readSession();
   if(pendingSession?.open){const state=pendingSession;pendingSession=null;restore(state).then(openedNotification);}
 
+  // Each highlight radio must have exactly one Finsweet field owner: its label.
+  // The shop's DOMContentLoaded setup also adds a field to the input, which
+  // Finsweet indexes as a second boolean filter when restored already checked.
+  // Run after that setup and before the shop loads Finsweet after its data gate.
+  function normalizeShopHighlights(){
+    document.querySelectorAll('#wf-form-searchbar input[name="Highlights"],#wf-form-searchbar input[name="Hightlights"]').forEach(input=>{
+      const label=input.closest('label');if(!label)return;
+      input.removeAttribute('fs-cmsfilter-field');label.setAttribute('fs-cmsfilter-field','badge');
+    });
+  }
+  if(document.readyState==='complete')normalizeShopHighlights();
+  else document.addEventListener('DOMContentLoaded',normalizeShopHighlights,{once:true});
   const params=new URLSearchParams(location.search);
+  // The native newsletter popup lives on home and product pages. On pages
+  // without it, return to home and open that same signup instead of account login.
+  if(params.get('eq_newsletter')==='1'){
+    const start=Date.now();
+    const openWhenReady=()=>{
+      if(window.EyequipmentNewsletterPopup?.open){
+        const clean=new URL(location.href);clean.searchParams.delete('eq_newsletter');history.replaceState(history.state,'',clean.href);
+        toggle(false);window.EyequipmentNewsletterPopup.open();
+      }else if(Date.now()-start<15000)setTimeout(openWhenReady,100);
+    };openWhenReady();
+  }
   const requested=[['Kategorie','eq_category'],['Muster','eq_pattern'],['Farbe','eq_color'],['Highlights','eq_highlight']].filter(([,key])=>params.has(key)).map(([name,key])=>({name,value:params.get(key)}));
   if(requested.length && document.querySelector('#wf-form-searchbar')) {
     const clean=new URL(location.href); ['eq_category','eq_pattern','eq_color','eq_highlight'].forEach(key=>clean.searchParams.delete(key));
