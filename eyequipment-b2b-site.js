@@ -435,6 +435,7 @@
 
   const state = {
     initialized: true,
+    minimumOrder: B2B_MINIMUM_ORDER,
     registered: false,
     isB2B: false,
     companyLocationId: null,

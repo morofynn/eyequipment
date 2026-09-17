@@ -102,6 +102,10 @@
   const newsletterKey='eq-assistant-newsletter-until-v2',welcomeKey='eq-assistant-welcome-read-v1',pendingNewsletterKey='eq-assistant-newsletter-pending-v2',visitKey='eq-assistant-visit-v1';
   const badge=root.querySelector('.notification-badge');let newsletterPending=false,welcomeUnread=false,welcomeArrived=false;
   const cartNotesKey='eq-assistant-cart-notes-v1';let cartNotes=[];
+  const milestoneKey='eq-assistant-cart-milestones-v1';let milestones=[],milestoneSeen={};
+  try{const saved=JSON.parse(sessionStorage.getItem(milestoneKey)||'{}');milestones=(saved.notes||[]).filter(n=>['shipping','minimum'].includes(n.kind)&&typeof n.id==='string'&&Number.isFinite(n.created)&&Date.now()-n.created<30*60000&&typeof n.unread==='boolean'&&Number.isFinite(n.threshold)&&typeof n.currency==='string').slice(-5);milestoneSeen=saved.seen&&typeof saved.seen==='object'?saved.seen:{};}catch{}
+  function saveMilestones(){try{sessionStorage.setItem(milestoneKey,JSON.stringify({notes:milestones,seen:milestoneSeen}));}catch{}}
+  const cartUnread=()=>cartNotes.some(n=>n.unread)||milestones.some(n=>n.unread);
   try{const saved=JSON.parse(sessionStorage.getItem(cartNotesKey)||'[]');if(Array.isArray(saved))cartNotes=saved.filter(n=>n&&typeof n.id==='string'&&/^\d+$/.test(n.sourceId)&&Number.isFinite(n.created)&&Date.now()-n.created<30*60000&&typeof n.unread==='boolean'&&Array.isArray(n.offers)&&n.offers.length<=3&&n.offers.every(o=>/^\d+$/.test(o.id)&&['match','best','style'].includes(o.role))).slice(-5);}catch{}
   function saveCartNotes(){try{sessionStorage.setItem(cartNotesKey,JSON.stringify(cartNotes));}catch{}}
   const stored=(key)=>{try{return localStorage.getItem(key);}catch{return null;}};
@@ -116,7 +120,7 @@
     let signedIn=false;try{const auth=JSON.parse(stored('_sf_oauth_tokens')||'null');signedIn=!!auth?.tokens?.access_token&&Number(auth.expiresAt)>Date.now();}catch{}
     return !signedIn||/noch nicht angemeldet|Jetzt abonnieren/.test(statuses);
   }
-  function updateBadge(){const count=cartNotes.filter(n=>n.unread).length+Number(welcomeUnread&&welcomeArrived)+Number(newsletterPending);badge.textContent=String(Math.min(9,count)||1);badge.hidden=panelOpen||!count;if(!panelOpen)launcher.setAttribute('aria-label','eyequipment Assistent öffnen'+(!badge.hidden?' – neue Nachricht':''));}
+  function updateBadge(){const count=cartNotes.filter(n=>n.unread).length+milestones.filter(n=>n.unread).length+Number(welcomeUnread&&welcomeArrived)+Number(newsletterPending);badge.textContent=String(Math.min(9,count)||1);badge.hidden=panelOpen||!count;if(!panelOpen)launcher.setAttribute('aria-label','eyequipment Assistent öffnen'+(!badge.hidden?' – neue Nachricht':''));}
   function newsletterInvite(){
     if(restoring){more();return;}
     newsletterPending=false;try{sessionStorage.removeItem(pendingNewsletterKey);}catch{}updateBadge();if(!newsletterEligible())return;
@@ -182,7 +186,7 @@
     }); feed.append(group); feed.scrollTop = feed.scrollHeight;
   }
   function home() {
-    if(!restoring){cartNotes=cartNotes.filter(n=>n.unread);saveCartNotes();}
+    if(!restoring){cartNotes=cartNotes.filter(n=>n.unread);saveCartNotes();milestones=milestones.filter(n=>n.unread);saveMilestones();}
     ticket++; steps=[]; selected = null; feed.replaceChildren(); root.querySelector('.back').hidden=true;
     bubble('Hi, schön, dass du da bist!\nLass uns dein nächstes Lieblingsdesign finden. Oder kann ich dir bei einer Frage helfen?');
     choices([{label:'Lieblingsdesign finden',primary:true,action:discover},{label:'Eine Frage klären',action:help},{label:'Mehr entdecken',action:more}]);
@@ -328,7 +332,20 @@
   };const pending=productPreparation.then(work,work);productPreparation=pending.catch(()=>{});return pending;}
   let matchBuying=false;
   let offerBuying=false,cartRendering=false,nextCartRender=0,cartNoteQueue=Promise.resolve(),cartSdk=null;
-  let pendingCartAdds=[];
+  let pendingCartAdds=[],milestoneBaseline=null;
+  function milestoneRule(cart){
+    const state=window.EyequipmentNativeB2B;if(state?.switching||state?.statusError||state?.cartContextError||document.documentElement.classList.contains('native-b2b-pending'))return null;
+    const b2b=!!state?.isB2B,kind=b2b?'minimum':'shipping';
+    const threshold=b2b?Number(state.minimumOrder):Number([...document.scripts].map(el=>el.textContent).join('\n').match(/const\s+B2C_SHIPPING_THRESHOLD\s*=\s*(\d+(?:\.\d+)?)/)?.[1]);
+    const money=cart?.cost?.[b2b?'subtotalAmount':'totalAmount'];if(!(threshold>0)||!money||money.currencyCode!=='EUR'||!Number.isFinite(Number(money.amount)))return null;
+    return {kind,threshold,currency:money.currencyCode,amount:Number(money.amount),key:JSON.stringify([cart.id||'current',kind,threshold,money.currencyCode])};
+  }
+  function checkCartMilestone(event){
+    const next=milestoneRule(event.cart);if(!next){milestoneBaseline=null;return;}
+    const before=milestoneBaseline;milestoneBaseline=next;
+    if(!['addToCart','increaseQuantity','decreaseQuantity','updateCartLineItem'].includes(event.type)||!before||(!before.empty&&before.key!==next.key)||(!before.empty&&before.amount>=next.threshold)||next.amount<next.threshold||milestoneSeen[next.key])return;
+    milestoneSeen[next.key]=true;milestones.push({...next,id:`milestone-${Date.now()}`,created:Date.now(),unread:true});milestones=milestones.slice(-5);saveMilestones();updateBadge();position();renderCartNotes();
+  }
   const numericId=value=>String(value||'').split('/').pop();
   function cartLines(cart=window.Shopyflow?._cart){const lines=cart?.lines;return Array.isArray(lines)?lines:lines?.nodes||lines?.edges?.map(edge=>edge.node)||[];}
   function cartQuantity(cart,variantId){return cartLines(cart).filter(line=>numericId(line.merchandise?.id)===numericId(variantId)).reduce((sum,line)=>sum+Number(line.quantity||0),0);}
@@ -341,16 +358,20 @@
     if(!/^\d+$/.test(sourceId)||!/^\d{6,}$/.test(variantId))return;
     bindCartEvents();
     pendingCartAdds=pendingCartAdds.filter(intent=>Date.now()-intent.created<30000).slice(-9);
-    pendingCartAdds.push({sourceId,variantId,before:cartQuantity(window.Shopyflow?._cart,variantId),created:Date.now()});
+    pendingCartAdds.push({sourceId,variantId,existing:cartProductIds().has(sourceId),before:cartQuantity(window.Shopyflow?._cart,variantId),created:Date.now()});
   },true);
   function bindCartEvents(){
-    const sdk=window.Shopyflow;if(!sdk?.on||cartSdk===sdk)return;cartSdk=sdk;
+    const sdk=window.Shopyflow;if(!sdk?.on||cartSdk===sdk)return;cartSdk=sdk;milestoneBaseline=sdk._cart?milestoneRule(sdk._cart):{empty:true};
+    sdk.on('cartLoad',event=>{milestoneBaseline=milestoneRule(event.cart);});
     sdk.on('cartUpdate',event=>{
       try{
+        checkCartMilestone(event);
         if(event.type!=='addToCart'||matchBuying||offerBuying||!Array.isArray(event.addedItem))return;
         pendingCartAdds=pendingCartAdds.filter(intent=>Date.now()-intent.created<30000);
         const index=pendingCartAdds.findIndex(intent=>event.addedItem.some(item=>numericId(item.merchandiseId)===intent.variantId)&&cartQuantity(event.cart,intent.variantId)>intent.before);
         if(index<0)return;const [intent]=pendingCartAdds.splice(index,1),inCart=cartProductIds(event.cart);
+        pendingCartAdds=pendingCartAdds.filter(other=>other.variantId!==intent.variantId);
+        if(intent.existing)return;
         cartNoteQueue=cartNoteQueue.then(()=>createCartNote(intent.sourceId,inCart)).catch(()=>{});
       }catch{}
     });
@@ -377,9 +398,16 @@
     cartNotes.push({id:`${Date.now()}-${Math.floor(Math.random()*1000000)}`,created:Date.now(),sourceId,offers,unread:true});cartNotes=cartNotes.slice(-5);saveCartNotes();updateBadge();position();renderCartNotes();
   }
   async function renderCartNotes(){
-    if(!panelOpen||restoring||cartRendering||Date.now()<nextCartRender||feed.querySelector('.typing,.form-frame')||!cartNotes.length)return;
+    if(!panelOpen||restoring||cartRendering||Date.now()<nextCartRender||feed.querySelector('.typing,.form-frame')||(!cartNotes.length&&!milestones.length))return;
     cartRendering=true;
     try{
+      for(const note of milestones){
+        if([...feed.querySelectorAll('[data-cart-milestone]')].some(el=>el.dataset.cartMilestone===note.id))continue;
+        const section=element('section','cart-offer-note');section.dataset.cartMilestone=note.id;
+        const amount=new Intl.NumberFormat('de-DE',{style:'currency',currency:note.currency}).format(note.threshold);
+        section.append(element('div','bubble',note.kind==='minimum'?`Geschafft! Dein Warenkorb hat den Mindestbestellwert von ${amount} netto erreicht. Du kannst deine Händlerbestellung jetzt abschließen.`:`Geschafft! Dein Warenkorb hat die Gratisversand-Grenze von ${amount} erreicht. Der kostenlose Versand ist für dich freigeschaltet.`));
+        const button=element('button','context-share-button','Warenkorb ansehen');button.type='button';button.onclick=()=>{toggle(false);window.Shopyflow?.openCart?.();};section.append(button);feed.append(section);feed.scrollTop+=section.getBoundingClientRect().top-feed.getBoundingClientRect().top-6;note.unread=false;
+      }saveMilestones();updateBadge();position();
       const items=await loadCatalog();if(!panelOpen||restoring||feed.querySelector('.typing,.form-frame'))return;
       for(const note of cartNotes){
         if([...feed.querySelectorAll('[data-cart-note]')].some(el=>el.dataset.cartNote===note.id))continue;
@@ -682,9 +710,9 @@
     const footer=document.querySelector('footer, .footer, [data-eq-footer]');
     const banner=document.querySelector('.mobile-product-banner'); const bannerRect=banner?.getBoundingClientRect();
     const covered=!!bannerRect && getComputedStyle(banner).display!=='none' && getComputedStyle(banner).visibility!=='hidden' && Number(getComputedStyle(banner).opacity)>0 && bannerRect.top<innerHeight-16 && bannerRect.bottom>innerHeight-70 && bannerRect.right>innerWidth-70;
-    const cartUnread=cartNotes.some(note=>note.unread);
-    if(!panelOpen&&covered&&cartUnread&&innerWidth<=600)launcher.style.bottom=`${Math.max(16,Math.min(innerHeight-70,innerHeight-bannerRect.top+12))}px`;else launcher.style.removeProperty('bottom');
-    const hidden=!panelOpen && ((!!footer && footer.getBoundingClientRect().top<innerHeight-16)||(covered&&!cartUnread));
+    const unreadCart=cartUnread();
+    if(!panelOpen&&covered&&unreadCart&&innerWidth<=600)launcher.style.bottom=`${Math.max(16,Math.min(innerHeight-70,innerHeight-bannerRect.top+12))}px`;else launcher.style.removeProperty('bottom');
+    const hidden=!panelOpen && ((!!footer && footer.getBoundingClientRect().top<innerHeight-16)||(covered&&!unreadCart));
     launcher.classList.toggle('footer-hidden',hidden); launcher.inert=hidden;
   }
   function schedulePosition() { if(!positionFrame)positionFrame=requestAnimationFrame(position); }
