@@ -108,7 +108,7 @@
   let noticeTiming={last:0,suggestion:0};try{noticeTiming={...noticeTiming,...JSON.parse(sessionStorage.getItem('eq-assistant-notice-timing-v1')||'{}')};}catch{}
   let noticeVersion=0;
   function noticeSent(suggestion=false){noticeVersion++;noticeTiming.last=Date.now();if(suggestion)noticeTiming.suggestion=Date.now();try{sessionStorage.setItem('eq-assistant-notice-timing-v1',JSON.stringify(noticeTiming));}catch{}}
-  function focusNotice(section){requestAnimationFrame(()=>requestAnimationFrame(()=>{if(panelOpen&&section.isConnected)feed.scrollTop+=section.getBoundingClientRect().top-feed.getBoundingClientRect().top-6;}));}
+  function focusNotice(section){requestAnimationFrame(()=>requestAnimationFrame(()=>{if(!panelOpen||!section.isConnected)return;feed.scrollTop+=section.getBoundingClientRect().top-feed.getBoundingClientRect().top-6;if(reducedMotion())return;clearTimeout(section._arrivalTimer);section._arrivalTimer=setTimeout(()=>{if(panelOpen&&section.isConnected)section.animate([{opacity:.25,transform:'translateY(8px) scale(.97)'},{opacity:1,transform:'translateY(-2px) scale(1)',offset:.7},{opacity:1,transform:'translateY(0) scale(1)'}],{duration:440,easing:'cubic-bezier(.22,1,.36,1)'});},240);}));}
   function deferNewsletter(){if(!newsletterPending)return;newsletterPending=false;visit.notified=false;try{sessionStorage.removeItem(pendingNewsletterKey);localStorage.removeItem(newsletterKey);}catch{}touchVisit();}
   async function wishlistIds(){try{const value=await Promise.race([window.ShopyflowWishlist?.getWishlist?.(),new Promise(resolve=>setTimeout(()=>resolve(null),2500))]);return new Set((Array.isArray(value)?value:value?.productIds||[]).map(id=>String(id).split('/').pop()));}catch{return new Set();}}
   const cartUnread=()=>cartNotes.some(n=>n.unread)||milestones.some(n=>n.unread);
@@ -425,8 +425,10 @@
           section.append(element('div','bubble','Schön, dass du wieder da bist! Auf deiner Wunschliste warten noch gemerkte Designs. Möchtest du sie dir ansehen?'));
           const buttons=element('div','choices'),yes=element('a','choice choice-primary','Ja, gerne'),no=element('button','choice choice-secondary','Gerade nicht');yes.href=findPage(/wunschliste/i,'/wunschliste');no.type='button';yes.addEventListener('click',()=>{note.dismissed=true;saveMilestones();saveSession();});no.onclick=()=>{note.dismissed=true;saveMilestones();section.replaceChildren(element('div','bubble','Alles klar! Viel Freude beim Stöbern.'));};buttons.append(yes,no);section.append(buttons);feed.append(section);if(note.unread)focusNotice(section);note.unread=false;continue;
         }
-        const amount=new Intl.NumberFormat('de-DE',{style:'currency',currency:note.currency}).format(note.threshold);
-        section.append(element('div','bubble',note.kind==='minimum'?`Geschafft! Dein Warenkorb hat den Mindestbestellwert von ${amount} netto erreicht. Du kannst deine Händlerbestellung jetzt abschließen.`:`Geschafft! Dein Warenkorb hat die Gratisversand-Grenze von ${amount} erreicht. Der kostenlose Versand ist für dich freigeschaltet.`));
+        const amount=new Intl.NumberFormat('de-DE',{style:'currency',currency:note.currency,minimumFractionDigits:0,maximumFractionDigits:2}).format(note.threshold);
+        const message=element('div','bubble milestone-reward'),headline=element('strong','milestone-headline','Geschafft! 🎉'),value=element('strong','milestone-amount',amount);
+        message.append(headline,document.createTextNode(note.kind==='minimum'?'Dein Warenkorb hat den Mindestbestellwert von ':'Dein Warenkorb hat die Gratisversand-Grenze von '),value,document.createTextNode(note.kind==='minimum'?' netto erreicht. ':' erreicht. '),element('strong','',note.kind==='minimum'?'Deine Händlerbestellung kann losgehen!':'Der Versand geht auf uns!'),document.createTextNode(' :)'));
+        section.append(message);
         const button=element('button','context-share-button','Warenkorb ansehen');button.type='button';button.onclick=()=>{toggle(false);window.Shopyflow?.openCart?.();};section.append(button);feed.append(section);if(note.unread)focusNotice(section);note.unread=false;
       }saveMilestones();updateBadge();position();
       const items=await loadCatalog();if(!panelOpen||restoring||feed.querySelector('.typing,.form-frame'))return;

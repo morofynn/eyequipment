@@ -192,3 +192,7 @@ button:focus-visible, a:focus-visible { outline: 3px solid #777; outline-offset:
 .newsletter-invitation p { margin:0 0 12px; }
 .newsletter-actions { display:grid; grid-template-columns:1fr 1fr; gap:8px; }
 .newsletter-actions .choice { text-align:center; margin:0; }
+
+.milestone-reward { background:#f1f8ef; }
+.milestone-headline { display:block; margin-bottom:6px; font-size:16px; }
+.milestone-amount { color:#237b38; font-weight:700; white-space:nowrap; }
