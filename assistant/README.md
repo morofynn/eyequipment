@@ -143,3 +143,13 @@ Nach einem bestätigten nativen Storesynk-`cartUpdate` vom Typ `addToCart` ersch
 Match-Sammelkäufe und Käufe aus diesen Empfehlungskarten lösen keine weiteren Empfehlungen aus. Jede Karte nutzt native Produktvarianten und den bestehenden Warenkorb, einschließlich Händler-Mindestmengen. Die letzten fünf Nachrichten speichern nur öffentliche Produkt-IDs und Lesestatus in der Sitzung, höchstens 30 Minuten. Kein eigener Server oder KI-Dienst.
 
 Erneutes Hinzufügen eines bereits enthaltenen Produkts (auch einer anderen Variante) erzeugt keinen neuen Produkthinweis. Ein bestätigtes Erreichen der bestehenden Gratisversand-Grenze oder des Händler-Mindestbestellwerts erzeugt einen eigenen Hinweis mit Warenkorb-Link und Ungelesen-Indikator. Die Versandgrenze stammt aus dem vorhandenen Cart-UI-Embed, der B2B-Mindestwert aus `EyequipmentNativeB2B.minimumOrder`; es gibt keine zusätzliche gepflegte Preisliste. Nur EUR-Schwellen; reine Lade-, Identitäts- und Währungswechsel erzeugen keine Meldung. Jede Schwelle wird pro Warenkorb und Sitzung einmal gemeldet, auch wenn sie durch Mengenerhöhung oder Match-Kauf erreicht wird.
+
+## Nachrichtentiming und Wunschliste
+
+Empfehlungen zeigen jetzt maximal zwei Karten: einen Match und zufällig einen Bestseller oder einen verfügbaren Wunschlistenartikel. Die Wunschliste wird ausschließlich lesend über das bereits installierte `ShopyflowWishlist.getWishlist()` geladen. Maximal ein Mäppchen, keine Dubletten oder bereits enthaltenen Produkte.
+
+Produkthinweise haben 90 Sekunden Cooldown, der auch beim Seitenwechsel gilt. Ein neu erreichter Warenkorb-Meilenstein hat Vorrang und unterdrückt die dazugehörige Empfehlung sowie noch ungelesene Empfehlungen. Die Newsletter-Frage wartet mindestens 120 Sekunden nach einer anderen Nachricht und bleibt bei ungelesenen Warenkorb-Hinweisen zurückgestellt.
+
+Nach mindestens drei Stunden Abwesenheit wird ein Nutzer mit vorhandenen Wunschlistenartikeln einmal pro Besuch nach acht Sekunden begrüßt und kann die Wunschliste öffnen oder ablehnen. Der letzte Besuchszeitpunkt liegt lokal; Wunschlisteninhalte werden nicht zusätzlich gespeichert. Neu eingegangene Nachrichten werden nach der Wiederherstellung des Chatverlaufs in den sichtbaren Bereich gescrollt.
+
+Die installierte SDK-Version sendet beim Hinzufügen `cartLoad` unmittelbar vor `cartUpdate`. Ein `cartLoad` aktualisiert deshalb die Vergleichsbasis erst im nächsten Task; das nachfolgende `cartUpdate` erhält noch den alten Warenwert. Tests bilden diese reale Reihenfolge nach, einschließlich B2B-Nettowarenwert.

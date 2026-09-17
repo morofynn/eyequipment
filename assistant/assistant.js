@@ -103,10 +103,16 @@
   const badge=root.querySelector('.notification-badge');let newsletterPending=false,welcomeUnread=false,welcomeArrived=false;
   const cartNotesKey='eq-assistant-cart-notes-v1';let cartNotes=[];
   const milestoneKey='eq-assistant-cart-milestones-v1';let milestones=[],milestoneSeen={};
-  try{const saved=JSON.parse(sessionStorage.getItem(milestoneKey)||'{}');milestones=(saved.notes||[]).filter(n=>['shipping','minimum'].includes(n.kind)&&typeof n.id==='string'&&Number.isFinite(n.created)&&Date.now()-n.created<30*60000&&typeof n.unread==='boolean'&&Number.isFinite(n.threshold)&&typeof n.currency==='string').slice(-5);milestoneSeen=saved.seen&&typeof saved.seen==='object'?saved.seen:{};}catch{}
+  try{const saved=JSON.parse(sessionStorage.getItem(milestoneKey)||'{}');milestones=(saved.notes||[]).filter(n=>['shipping','minimum','wishlist'].includes(n.kind)&&typeof n.id==='string'&&Number.isFinite(n.created)&&Date.now()-n.created<30*60000&&typeof n.unread==='boolean'&&Number.isFinite(n.threshold)&&typeof n.currency==='string').slice(-5);milestoneSeen=saved.seen&&typeof saved.seen==='object'?saved.seen:{};}catch{}
   function saveMilestones(){try{sessionStorage.setItem(milestoneKey,JSON.stringify({notes:milestones,seen:milestoneSeen}));}catch{}}
+  let noticeTiming={last:0,suggestion:0};try{noticeTiming={...noticeTiming,...JSON.parse(sessionStorage.getItem('eq-assistant-notice-timing-v1')||'{}')};}catch{}
+  let noticeVersion=0;
+  function noticeSent(suggestion=false){noticeVersion++;noticeTiming.last=Date.now();if(suggestion)noticeTiming.suggestion=Date.now();try{sessionStorage.setItem('eq-assistant-notice-timing-v1',JSON.stringify(noticeTiming));}catch{}}
+  function focusNotice(section){requestAnimationFrame(()=>requestAnimationFrame(()=>{if(panelOpen&&section.isConnected)feed.scrollTop+=section.getBoundingClientRect().top-feed.getBoundingClientRect().top-6;}));}
+  function deferNewsletter(){if(!newsletterPending)return;newsletterPending=false;visit.notified=false;try{sessionStorage.removeItem(pendingNewsletterKey);localStorage.removeItem(newsletterKey);}catch{}touchVisit();}
+  async function wishlistIds(){try{const value=await Promise.race([window.ShopyflowWishlist?.getWishlist?.(),new Promise(resolve=>setTimeout(()=>resolve(null),2500))]);return new Set((Array.isArray(value)?value:value?.productIds||[]).map(id=>String(id).split('/').pop()));}catch{return new Set();}}
   const cartUnread=()=>cartNotes.some(n=>n.unread)||milestones.some(n=>n.unread);
-  try{const saved=JSON.parse(sessionStorage.getItem(cartNotesKey)||'[]');if(Array.isArray(saved))cartNotes=saved.filter(n=>n&&typeof n.id==='string'&&/^\d+$/.test(n.sourceId)&&Number.isFinite(n.created)&&Date.now()-n.created<30*60000&&typeof n.unread==='boolean'&&Array.isArray(n.offers)&&n.offers.length<=3&&n.offers.every(o=>/^\d+$/.test(o.id)&&['match','best','style'].includes(o.role))).slice(-5);}catch{}
+  try{const saved=JSON.parse(sessionStorage.getItem(cartNotesKey)||'[]');if(Array.isArray(saved))cartNotes=saved.filter(n=>n&&typeof n.id==='string'&&/^\d+$/.test(n.sourceId)&&Number.isFinite(n.created)&&Date.now()-n.created<30*60000&&typeof n.unread==='boolean'&&Array.isArray(n.offers)&&n.offers.length<=2&&n.offers.every(o=>/^\d+$/.test(o.id)&&['match','best','wish'].includes(o.role))).slice(-5);}catch{}
   function saveCartNotes(){try{sessionStorage.setItem(cartNotesKey,JSON.stringify(cartNotes));}catch{}}
   const stored=(key)=>{try{return localStorage.getItem(key);}catch{return null;}};
   const remember=(key,value)=>{try{localStorage.setItem(key,String(value));return true;}catch{return false;}};
@@ -131,21 +137,22 @@
     yes.onclick=()=>{remember(newsletterKey,Date.now()+86400000);invitation.remove();openNewsletter();};
     no.onclick=()=>{remember(newsletterKey,Date.now()+86400000);invitation.replaceChildren(element('p','','Alles klar! Viel Freude beim Stöbern.'));if(!feed.querySelector('.choices'))more();};buttons.append(yes,no);invitation.append(buttons);feed.append(invitation);feed.scrollTop=feed.scrollHeight;
   }
-  async function openedNotification(){welcomeUnread=false;remember(welcomeKey,1);updateBadge();if(newsletterPending){while(restoring)await new Promise(resolve=>setTimeout(resolve,100));if(panelOpen)newsletterInvite();}renderCartNotes();}
+  async function openedNotification(){welcomeUnread=false;remember(welcomeKey,1);updateBadge();while(restoring)await new Promise(resolve=>setTimeout(resolve,100));await new Promise(resolve=>requestAnimationFrame(resolve));if(!panelOpen)return;await renderCartNotes();if(newsletterPending&&!cartUnread())newsletterInvite();}
   let visit={start:Date.now(),last:Date.now(),notified:false};
   try{const previous=JSON.parse(sessionStorage.getItem(visitKey)||'null');if(previous&&Number.isFinite(previous.start)&&Date.now()-previous.last<30*60000)visit=previous;}catch{}
-  function touchVisit(){visit.last=Date.now();try{sessionStorage.setItem(visitKey,JSON.stringify(visit));}catch{}}
+  const previousSeen=Number(stored('eq-assistant-last-seen-v1'));if(previousSeen>0&&Date.now()-previousSeen>=3*3600000){visit.returning=true;visit.wishlistNotified=false;}
+  function touchVisit(){visit.last=Date.now();remember('eq-assistant-last-seen-v1',visit.last);try{sessionStorage.setItem(visitKey,JSON.stringify(visit));}catch{}}
   touchVisit();
   const activity=()=>{if(Date.now()-visit.last>15000)touchVisit();};
   document.addEventListener('pointerdown',activity,{passive:true});document.addEventListener('keydown',activity,{passive:true});document.addEventListener('scroll',activity,{passive:true});
   setTimeout(()=>{welcomeArrived=true;updateBadge();},4000);
   function newsletterNudge(){
-    if(visit.notified||document.hidden||Date.now()-visit.start<30000||!newsletterEligible())return;
+    if(visit.notified||Date.now()-noticeTiming.last<120000||cartUnread()||document.hidden||Date.now()-visit.start<30000||!newsletterEligible())return;
     if(!/^\/(?:shop\/?|products\/[^/]+\/?)?$/.test(location.pathname))return;
     if(Number(stored(newsletterKey))>Date.now())return;
     if(document.querySelector('[data-eq-newsletter-promo]:not(.is-hidden)')||restoring||feed.querySelector('.typing,.form-frame'))return;
     if(!remember(newsletterKey,Date.now()+86400000))return;
-    visit.notified=true;touchVisit();newsletterPending=true;
+    visit.notified=true;touchVisit();newsletterPending=true;noticeSent();
     try{sessionStorage.setItem(pendingNewsletterKey,'1');}catch{}
     if(!panelOpen)updateBadge();else newsletterInvite();
   }
@@ -332,7 +339,14 @@
   };const pending=productPreparation.then(work,work);productPreparation=pending.catch(()=>{});return pending;}
   let matchBuying=false;
   let offerBuying=false,cartRendering=false,nextCartRender=0,cartNoteQueue=Promise.resolve(),cartSdk=null;
-  let pendingCartAdds=[],milestoneBaseline=null;
+  let pendingCartAdds=[],milestoneBaseline=null,cartLoadTimer=0;
+  async function wishlistNudge(){
+    if(!visit.returning||visit.wishlistNotified||Date.now()-visit.start<8000||Date.now()-noticeTiming.last<90000||document.hidden||restoring||cartUnread()||feed.querySelector('.typing,.form-frame')||!window.ShopyflowWishlist?.getWishlist)return;
+    visit.wishlistNotified=true;touchVisit();const ids=await wishlistIds();if(!ids.size)return;
+    if(Date.now()-noticeTiming.last<90000){visit.wishlistNotified=false;touchVisit();return;}
+    deferNewsletter();milestones.push({kind:'wishlist',id:`wishlist-${Date.now()}`,created:Date.now(),unread:true,threshold:0,currency:'EUR'});milestones=milestones.slice(-5);saveMilestones();noticeSent();updateBadge();position();renderCartNotes();
+  }
+  setInterval(wishlistNudge,2000);
   function milestoneRule(cart){
     const state=window.EyequipmentNativeB2B;if(state?.switching||state?.statusError||state?.cartContextError||document.documentElement.classList.contains('native-b2b-pending'))return null;
     const b2b=!!state?.isB2B,kind=b2b?'minimum':'shipping';
@@ -341,10 +355,10 @@
     return {kind,threshold,currency:money.currencyCode,amount:Number(money.amount),key:JSON.stringify([cart.id||'current',kind,threshold,money.currencyCode])};
   }
   function checkCartMilestone(event){
-    const next=milestoneRule(event.cart);if(!next){milestoneBaseline=null;return;}
+    clearTimeout(cartLoadTimer);const next=milestoneRule(event.cart);if(!next){milestoneBaseline=null;return;}
     const before=milestoneBaseline;milestoneBaseline=next;
     if(!['addToCart','increaseQuantity','decreaseQuantity','updateCartLineItem'].includes(event.type)||!before||(!before.empty&&before.key!==next.key)||(!before.empty&&before.amount>=next.threshold)||next.amount<next.threshold||milestoneSeen[next.key])return;
-    milestoneSeen[next.key]=true;milestones.push({...next,id:`milestone-${Date.now()}`,created:Date.now(),unread:true});milestones=milestones.slice(-5);saveMilestones();updateBadge();position();renderCartNotes();
+    milestoneSeen[next.key]=true;cartNotes=cartNotes.filter(note=>!note.unread);saveCartNotes();deferNewsletter();noticeSent();milestones.push({...next,id:`milestone-${Date.now()}`,created:Date.now(),unread:true});milestones=milestones.slice(-5);saveMilestones();updateBadge();position();renderCartNotes();return true;
   }
   const numericId=value=>String(value||'').split('/').pop();
   function cartLines(cart=window.Shopyflow?._cart){const lines=cart?.lines;return Array.isArray(lines)?lines:lines?.nodes||lines?.edges?.map(edge=>edge.node)||[];}
@@ -362,23 +376,23 @@
   },true);
   function bindCartEvents(){
     const sdk=window.Shopyflow;if(!sdk?.on||cartSdk===sdk)return;cartSdk=sdk;milestoneBaseline=sdk._cart?milestoneRule(sdk._cart):{empty:true};
-    sdk.on('cartLoad',event=>{milestoneBaseline=milestoneRule(event.cart);});
+    sdk.on('cartLoad',event=>{clearTimeout(cartLoadTimer);cartLoadTimer=setTimeout(()=>{milestoneBaseline=milestoneRule(event.cart);},0);});
     sdk.on('cartUpdate',event=>{
       try{
-        checkCartMilestone(event);
+        const reached=checkCartMilestone(event);
         if(event.type!=='addToCart'||matchBuying||offerBuying||!Array.isArray(event.addedItem))return;
         pendingCartAdds=pendingCartAdds.filter(intent=>Date.now()-intent.created<30000);
         const index=pendingCartAdds.findIndex(intent=>event.addedItem.some(item=>numericId(item.merchandiseId)===intent.variantId)&&cartQuantity(event.cart,intent.variantId)>intent.before);
         if(index<0)return;const [intent]=pendingCartAdds.splice(index,1),inCart=cartProductIds(event.cart);
         pendingCartAdds=pendingCartAdds.filter(other=>other.variantId!==intent.variantId);
-        if(intent.existing)return;
+        if(intent.existing||reached)return;
         cartNoteQueue=cartNoteQueue.then(()=>createCartNote(intent.sourceId,inCart)).catch(()=>{});
       }catch{}
     });
   }
   window.addEventListener('ShopyflowReady',bindCartEvents);bindCartEvents();
   function sharedStyle(source,product){return ['Muster','Farbe'].flatMap(name=>attributes(source,name).filter(value=>attributes(product,name).includes(value)).map(value=>`${name}: ${value}`));}
-  function cartOffers(source,items,inCart){
+  function cartOffers(source,items,inCart,wishes=new Set()){
     const candidates=items.filter(p=>p.availableForSale&&p.id!==source.id&&!inCart.has(numericId(p.id))&&/^(Tücher|Mäppchen)$/.test(p.productType));
     for(let i=candidates.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[candidates[i],candidates[j]]=[candidates[j],candidates[i]];}
     let linked=[];try{linked=JSON.parse(source.relatedProducts?.value||'[]');}catch{}
@@ -387,14 +401,16 @@
     const add=(product,role)=>{if(!product)return;offers.push({id:numericId(product.id),role});if(product.productType==='Mäppchen')pouches++;};
     const allowed=p=>!offers.some(o=>o.id===numericId(p.id))&&(p.productType!=='Mäppchen'||pouches<1);
     add(candidates.filter(p=>p.productType!==source.productType).sort((a,b)=>score(b)-score(a)).find(p=>score(p)>0),'match');
-    add(candidates.find(p=>allowed(p)&&isBestseller(p)),'best');
-    add(candidates.filter(allowed).sort((a,b)=>sharedStyle(source,b).length-sharedStyle(source,a).length).find(p=>sharedStyle(source,p).length>0),'style');
+    const wish=candidates.find(p=>allowed(p)&&wishes.has(numericId(p.id))),best=candidates.find(p=>allowed(p)&&isBestseller(p));
+    if(wish&&(!best||Math.random()<.5))add(wish,'wish');else add(best,'best');
     return offers;
   }
   async function createCartNote(sourceId,inCart){
+    if(Date.now()-noticeTiming.suggestion<90000||Date.now()-noticeTiming.last<90000)return;
+    noticeSent(true);const version=noticeVersion;deferNewsletter();
     if(cartNotes.some(note=>note.sourceId===sourceId&&Date.now()-note.created<10000))return;
     const items=await loadCatalog(),source=items.find(p=>numericId(p.id)===sourceId);if(!source)return;
-    const offers=cartOffers(source,items,inCart);if(!offers.length)return;
+    const wishes=await wishlistIds();if(noticeVersion!==version)return;const offers=cartOffers(source,items,inCart,wishes);if(!offers.length)return;
     cartNotes.push({id:`${Date.now()}-${Math.floor(Math.random()*1000000)}`,created:Date.now(),sourceId,offers,unread:true});cartNotes=cartNotes.slice(-5);saveCartNotes();updateBadge();position();renderCartNotes();
   }
   async function renderCartNotes(){
@@ -402,11 +418,16 @@
     cartRendering=true;
     try{
       for(const note of milestones){
+        if(note.dismissed)continue;
         if([...feed.querySelectorAll('[data-cart-milestone]')].some(el=>el.dataset.cartMilestone===note.id))continue;
         const section=element('section','cart-offer-note');section.dataset.cartMilestone=note.id;
+        if(note.kind==='wishlist'){
+          section.append(element('div','bubble','Schön, dass du wieder da bist! Auf deiner Wunschliste warten noch gemerkte Designs. Möchtest du sie dir ansehen?'));
+          const buttons=element('div','choices'),yes=element('a','choice choice-primary','Ja, gerne'),no=element('button','choice choice-secondary','Gerade nicht');yes.href=findPage(/wunschliste/i,'/wunschliste');no.type='button';yes.addEventListener('click',()=>{note.dismissed=true;saveMilestones();saveSession();});no.onclick=()=>{note.dismissed=true;saveMilestones();section.replaceChildren(element('div','bubble','Alles klar! Viel Freude beim Stöbern.'));};buttons.append(yes,no);section.append(buttons);feed.append(section);if(note.unread)focusNotice(section);note.unread=false;continue;
+        }
         const amount=new Intl.NumberFormat('de-DE',{style:'currency',currency:note.currency}).format(note.threshold);
         section.append(element('div','bubble',note.kind==='minimum'?`Geschafft! Dein Warenkorb hat den Mindestbestellwert von ${amount} netto erreicht. Du kannst deine Händlerbestellung jetzt abschließen.`:`Geschafft! Dein Warenkorb hat die Gratisversand-Grenze von ${amount} erreicht. Der kostenlose Versand ist für dich freigeschaltet.`));
-        const button=element('button','context-share-button','Warenkorb ansehen');button.type='button';button.onclick=()=>{toggle(false);window.Shopyflow?.openCart?.();};section.append(button);feed.append(section);feed.scrollTop+=section.getBoundingClientRect().top-feed.getBoundingClientRect().top-6;note.unread=false;
+        const button=element('button','context-share-button','Warenkorb ansehen');button.type='button';button.onclick=()=>{toggle(false);window.Shopyflow?.openCart?.();};section.append(button);feed.append(section);if(note.unread)focusNotice(section);note.unread=false;
       }saveMilestones();updateBadge();position();
       const items=await loadCatalog();if(!panelOpen||restoring||feed.querySelector('.typing,.form-frame'))return;
       for(const note of cartNotes){
@@ -418,14 +439,14 @@
         for(const offer of note.offers){
           const product=items.find(p=>numericId(p.id)===offer.id&&p.availableForSale);if(!product)continue;
           const card=element('article','cart-offer-card');card.setAttribute('role','listitem');
-          card.append(element('span','cart-offer-role',{match:'Dein Match',best:'Bestseller',style:'Dein Stil'}[offer.role]));
+          card.append(element('span','cart-offer-role',{match:'Dein Match',best:'Bestseller',wish:'Von deiner Wunschliste'}[offer.role]));
           const link=element('a','cart-offer-link');link.href=safe(product.url).href;link.addEventListener('click',saveSession);
           if(product.featuredImage?.url){const image=element('img');image.src=product.featuredImage.url;image.alt='';image.loading='lazy';image.onerror=()=>image.remove();link.append(image);}
           link.append(element('h3','',product.title));card.append(link,element('p','cart-offer-type',product.productType));
-          const shared=sharedStyle(source,product);card.append(element('p','cart-offer-reason',offer.role==='best'?'Ein beliebtes Design':shared.slice(0,2).join(' · ')||'Als Match empfohlen'));
+          const shared=sharedStyle(source,product);card.append(element('p','cart-offer-reason',offer.role==='best'?'Ein beliebtes Design':offer.role==='wish'?'Bereits von dir gemerkt':shared.slice(0,2).join(' · ')||'Als Match empfohlen'));
           offerCartControl(card,product);row.append(card);
         }
-        if(row.children.length){section.append(row);feed.append(section);feed.scrollTop+=section.getBoundingClientRect().top-feed.getBoundingClientRect().top-6;}
+        if(row.children.length){section.append(row);feed.append(section);if(note.unread)focusNotice(section);}
         note.unread=false;
       }
       saveCartNotes();updateBadge();position();
