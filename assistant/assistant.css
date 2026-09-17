@@ -75,6 +75,8 @@ button:focus-visible, a:focus-visible { outline: 3px solid #777; outline-offset:
 .selection { grid-template-columns: repeat(2,minmax(0,1fr)); padding: 12px; border-radius: 16px; background: #f7f5f2; }
 .selection .choice { text-align:center; padding:11px 8px; }
 .choice-with-preview { display:flex; align-items:center; gap:12px; }
+.choice-with-icon { display:flex; align-items:center; gap:12px; }
+.choice-category-icon { display:block; width:25px; height:25px; flex:0 0 25px; color:currentColor; }
 .choice-preview { display:block; width:56px; height:56px; object-fit:contain; flex:0 0 56px; border-radius:7px; background:#f7f5f2; }
 .choice-caption { min-width:0; overflow-wrap:anywhere; }
 .selection .choice-with-preview { flex-direction:column; justify-content:center; gap:8px; }

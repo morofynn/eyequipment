@@ -168,10 +168,11 @@
     const group = element('div', 'choices '+layout);group.setAttribute('role','group');
     const main=items.filter(item=>!item.secondary), secondary=items.filter(item=>item.secondary);
     const visible=main.slice(offset).concat(secondary);
-    visible.forEach(({ label, action, url, external, secondary, primary, heading, preview, kind='choice' }, index) => {
+    visible.forEach(({ label, action, url, external, secondary, primary, heading, preview, icon, kind='choice' }, index) => {
       if(heading)group.append(element('div','group-heading',heading));
       const el = element(url ? 'a' : 'button', 'choice'+(secondary?' choice-secondary':'')+(primary?' choice-primary':''), label);
       if(preview){try{const imageURL=new URL(preview);if(imageURL.protocol==='https:'){const image=element('img','choice-preview');image.src=imageURL.href;image.alt='';image.loading='lazy';image.addEventListener('error',()=>{image.remove();el.classList.remove('choice-with-preview');},{once:true});const caption=element('span','choice-caption',label);el.replaceChildren(image,caption);el.classList.add('choice-with-preview');}}catch{}}
+      if(icon){icon.classList.add('choice-category-icon');icon.setAttribute('aria-hidden','true');icon.setAttribute('focusable','false');el.replaceChildren(icon,element('span','choice-caption',label));el.classList.add('choice-with-icon');}
       el.style.setProperty('--delay', `${Math.min(index,6)*30}ms`);
       if (url) { const u = external ? instagramURL(url) : safe(url); if (!u) return; el.href = u.href; if(external){el.target='_blank';el.rel='noopener noreferrer';} el.addEventListener('click',saveSession); }
       else { el.type = 'button'; el._step={label,kind}; el._action=action; el.onclick = () => { if(group.inert||restoring)return; group.inert=true; respond(label,action,kind); }; }
@@ -228,13 +229,21 @@
     return product.tags.filter(tag=>tag.toLocaleLowerCase('de').startsWith(name.toLocaleLowerCase('de')+':')).map(tag=>tag.slice(tag.indexOf(':')+1).trim()).filter(Boolean);
   }
   function productTypes(items){const order=['Tücher','Mäppchen'];return [...new Set(items.map(p=>p.productType).filter(Boolean))].sort((a,b)=>{const ai=order.indexOf(a),bi=order.indexOf(b);return (ai<0?order.length:ai)-(bi<0?order.length:bi)||a.localeCompare(b,'de');});}
-  function typePreview(items,type){return items.find(p=>p.productType===type&&p.availableForSale&&p.featuredImage?.url)?.featuredImage.url||items.find(p=>p.productType===type&&p.featuredImage?.url)?.featuredImage.url;}
+  const categoryIcons={"Mäppchen": "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"100%\" viewBox=\"0 0 33.119 23.18\" class=\"menu-icon\"><g transform=\"translate(1 1.002)\"><rect width=\"3.13\" height=\"6.877\" transform=\"translate(0 5.065)\" fill=\"none\" stroke=\"currentColor\" stroke-linecap=\"round\" stroke-linejoin=\"round\" stroke-width=\"2\"></rect><path d=\"M25.7,20.912l-5.06.667a47.536,47.536,0,0,1-12.429,0l-5.06-.667A3.126,3.126,0,0,1,.43,17.8V4.994a3.133,3.133,0,0,1,2.72-3.11l5.06-.657a46.664,46.664,0,0,1,12.429,0l5.06.657a3.133,3.133,0,0,1,2.72,3.11V17.8A3.126,3.126,0,0,1,25.7,20.912Z\" transform=\"translate(2.701 -0.811)\" fill=\"none\" stroke=\"currentColor\" stroke-linecap=\"round\" stroke-linejoin=\"round\" stroke-width=\"2\"></path><line x2=\"20.671\" transform=\"translate(6.796 4.143)\" fill=\"none\" stroke=\"currentColor\" stroke-linecap=\"round\" stroke-linejoin=\"round\" stroke-width=\"2\"></line><path d=\"M5.714,6.481H2.286l.647-5.265H5.057Z\" transform=\"translate(19.896 2.931)\" fill=\"none\" stroke=\"currentColor\" stroke-linecap=\"round\" stroke-linejoin=\"round\" stroke-width=\"2\"></path></g></svg>", "Tücher": "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"100%\" viewBox=\"0 0 27.783 27.783\" class=\"menu-icon smaller\"><g transform=\"translate(1 1)\"><path d=\"M13.017.5H.125V26.282H25.909V13.39H13.017Z\" transform=\"translate(-0.125 -0.499)\" fill=\"none\" stroke=\"currentColor\" stroke-linecap=\"round\" stroke-linejoin=\"round\" stroke-width=\"2\"></path><path d=\"M1.313.5V13.39H14.2Z\" transform=\"translate(11.578 -0.499)\" fill=\"none\" stroke=\"currentColor\" stroke-linecap=\"round\" stroke-linejoin=\"round\" stroke-width=\"2\"></path></g></svg>"};
+  function typeIcon(type){
+    if(!categoryIcons[type])return null;
+    const control=[...document.querySelectorAll('input[name=Kategorie]')].find(input=>input.value===type);
+    const nav=[...document.querySelectorAll('nav a,.navbar a,.menu-link-button')].find(link=>text(link)===type&&link.querySelector('svg'));
+    const source=control?.closest('label')?.querySelector('svg')||nav?.querySelector('svg');
+    const icon=source?source.cloneNode(true):new DOMParser().parseFromString(categoryIcons[type],'image/svg+xml').documentElement;
+    icon.querySelectorAll('[id]').forEach(el=>el.removeAttribute('id'));icon.removeAttribute('id');return icon;
+  }
   async function products(personal = false) {
     const items = await task(loadCatalog); if (!items) return;
     if (!items.length) { bubble('Aktuell habe ich keine verknüpften Produkte gefunden.'); choices([{label:'Shop öffnen',url:findPage(/shop/i,'/shop')}]); return; }
     bubble(personal?'Sehr gerne! Wofür suchst du ein schönes Design?':'Was darf es sein?');
     const types = productTypes(items);
-    choices([...types.map(type=>({label:type,preview:typePreview(items,type),action:()=>productPath(items.filter(p=>p.productType===type),type,personal)})),{label:'Ein Match finden',action:()=>preference(items,null,{Kombination:true})},{label:'Ich bin noch offen',secondary:true,action:()=>productPath(items,null,personal)}]);
+    choices([...types.map(type=>({label:type,icon:typeIcon(type),action:()=>productPath(items.filter(p=>p.productType===type),type,personal)})),{label:'Ein Match finden',action:()=>preference(items,null,{Kombination:true})},{label:'Ich bin noch offen',secondary:true,action:()=>productPath(items,null,personal)}]);
   }
   function productPath(items,type,personal) {
     if(personal)return preference(items,type);
@@ -459,7 +468,7 @@
       bubble('Welche Produktart möchtest du? Muster und Farbe bleiben erhalten.');
       const types=productTypes(all);
       const apply=nextType=>showProducts(rank(all.filter(p=>(!nextType||p.productType===nextType)&&(!filters.Muster||attributes(p,'Muster').includes(filters.Muster))&&(!filters.Farbe||attributes(p,'Farbe').includes(filters.Farbe))&&(!filters.Highlights||isBestseller(p)))),0,nextType,filters);
-      return choices([...types.map(value=>({label:value,preview:typePreview(all,value),action:()=>apply(value)})),{label:'Alle Produktarten',secondary:true,action:()=>apply(null)}]);
+      return choices([...types.map(value=>({label:value,icon:typeIcon(value),action:()=>apply(value)})),{label:'Alle Produktarten',secondary:true,action:()=>apply(null)}]);
     }
     const updated={...filters};delete updated[name];
     const base=all.filter(p=>(!type||p.productType===type)&&(!updated.Muster||attributes(p,'Muster').includes(updated.Muster))&&(!updated.Farbe||attributes(p,'Farbe').includes(updated.Farbe))&&(!updated.Highlights||isBestseller(p)));
