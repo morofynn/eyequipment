@@ -153,3 +153,5 @@ Produkthinweise haben 90 Sekunden Cooldown, der auch beim Seitenwechsel gilt. Ei
 Nach mindestens drei Stunden Abwesenheit wird ein Nutzer mit vorhandenen Wunschlistenartikeln einmal pro Besuch nach acht Sekunden begrüßt und kann die Wunschliste öffnen oder ablehnen. Der letzte Besuchszeitpunkt liegt lokal; Wunschlisteninhalte werden nicht zusätzlich gespeichert. Neu eingegangene Nachrichten werden nach der Wiederherstellung des Chatverlaufs in den sichtbaren Bereich gescrollt.
 
 Die installierte SDK-Version sendet beim Hinzufügen `cartLoad` unmittelbar vor `cartUpdate`. Ein `cartLoad` aktualisiert deshalb die Vergleichsbasis erst im nächsten Task; das nachfolgende `cartUpdate` erhält noch den alten Warenwert. Tests bilden diese reale Reihenfolge nach, einschließlich B2B-Nettowarenwert.
+
+Produktoption „Frage zu diesem Produkt“ zeigt zuerst Produktdetails, Anwendung/Pflege/FAQ und „Frag uns direkt“. Nur die direkte Anfrage öffnet das vorhandene Kontaktformular; Produktname im Betreff und der Produktlink bleiben auch nach dem FAQ-Weg oder Wiederherstellung erhalten.

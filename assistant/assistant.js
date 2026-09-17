@@ -595,7 +595,7 @@
       button.onclick=()=>{if(restoring)return;respond(label,async()=>{
         const all=await task(loadCatalog);if(!all)return;const product=all.find(p=>p.id.split('/').pop()===id);
         if(!product){bubble('Dieses Produkt ist gerade nicht im verfügbaren Katalog.');return choices([{label:'Passendes Produkt finden',action:()=>products(true)}]);}
-        selected=product;return actionName==='related'?relatedTo(product):contact('Produktfrage');
+        selected=product;return actionName==='related'?relatedTo(product):productQuestion(product);
       },'context',{productId:id,action:actionName});};actions.append(button);
     }
     dialogButton('Match finden','related');dialogButton('Frage zu diesem Produkt','question');
@@ -645,14 +645,21 @@
     const reason=linked(partner)?'Von eyequipment als Match empfohlen':same?'Ein Match im gleichen Design':`Ein Match über ${shared.join(' · ')}`;
     return [{...source,matchReason:reason},{...partner,matchReason:reason}];
   }
-  async function faq() {
+  function productQuestion(product) {
+    selected=product;
+    bubble(`Was möchtest du über „${product.title}“ wissen?`);
+    const direct=()=>{selected=product;contact('Produktfrage');};
+    choices([{label:'Produktdetails ansehen',action:()=>{selected=product;const details=productInformation(product);choices([{label:'Anwendung, Pflege & FAQ',action:()=>faq(product)},{label:'Frag uns direkt',primary:true,action:direct}]);if(!restoring)focusNotice(details);}},{label:'Anwendung, Pflege & FAQ',action:()=>faq(product)},{label:'Frag uns direkt',primary:true,action:direct}]);
+  }
+  async function faq(product=null) {
     const doc = await task(()=>page(findPage(/faq/i,'/faq'))); if (!doc) return;
+    const direct=()=>{if(product)selected=product;contact(product?'Produktfrage':'Frage zu den FAQ');};
     const sections = [...doc.querySelectorAll('[data-faq-section]')];
-    if (!sections.length) { bubble('Die aktuellen Antworten findest du in unseren FAQ.'); choices([{label:'FAQ öffnen',url:findPage(/faq/i,'/faq')}]); return; }
-    bubble('Zu welchem Thema möchtest du mehr wissen?');
-    choices(sections.map(section=>({label:text(section.querySelector('.faq-topic-title'))||'Fragen & Antworten',action:()=>{
-      choices([...section.querySelectorAll('[data-faq-card]')].map(card=>({label:text(card.querySelector('[data-faq-question]')),action:()=>{bubble(text(card.querySelector('[data-faq-answer]')));choices([{label:'Weitere Fragen',action:faq},{label:'Das klärt meine Frage nicht',action:()=>contact('Frage zu den FAQ')}]);}})));
-    }})));
+    if (!sections.length) { bubble('Die aktuellen Antworten findest du in unseren FAQ.'); choices([{label:'FAQ öffnen',url:findPage(/faq/i,'/faq')},...(product?[{label:'Frag uns direkt',primary:true,action:direct}]:[])]); return; }
+    bubble(product?`Welche Frage zu „${product.title}“ möchtest du klären?`:'Zu welchem Thema möchtest du mehr wissen?');
+    choices([...sections.map(section=>({label:text(section.querySelector('.faq-topic-title'))||'Fragen & Antworten',action:()=>{
+      choices([...section.querySelectorAll('[data-faq-card]')].map(card=>({label:text(card.querySelector('[data-faq-question]')),action:()=>{bubble(text(card.querySelector('[data-faq-answer]')));choices([{label:'Weitere Fragen',action:()=>faq(product)},{label:product?'Frag uns direkt':'Das klärt meine Frage nicht',action:()=>{if(product)selected=product;contact(product?'Produktfrage':'Frage zu den FAQ');}}]);}})));
+    }})),...(product?[{label:'Frag uns direkt',primary:true,action:direct}]:[])]);
   }
   function pages() {
     nav=navigation(document);bubble('Wohin möchtest du? Die Links sind nach Thema gruppiert.');
@@ -715,7 +722,7 @@
       home();
       for(const step of state.steps) {
         if(step.kind==='context') {
-          await respond(step.label,async()=>{const all=await task(loadCatalog);if(!all)return;const product=all.find(p=>p.id.split('/').pop()===step.productId);if(!product){bubble('Das frühere Produkt ist nicht mehr verfügbar.');return choices([{label:'Lieblingsdesign finden',primary:true,action:discover}]);}selected=product;return step.action==='related'?relatedTo(product):contact('Produktfrage');},'context',{productId:step.productId,action:step.action,orderSeed:step.orderSeed});continue;
+          await respond(step.label,async()=>{const all=await task(loadCatalog);if(!all)return;const product=all.find(p=>p.id.split('/').pop()===step.productId);if(!product){bubble('Das frühere Produkt ist nicht mehr verfügbar.');return choices([{label:'Lieblingsdesign finden',primary:true,action:discover}]);}selected=product;return step.action==='related'?relatedTo(product):productQuestion(product);},'context',{productId:step.productId,action:step.action,orderSeed:step.orderSeed});continue;
         }
         const button=[...feed.querySelectorAll('button')].find(el=>el._step?.kind===step.kind&&el._step?.label===step.label);
         if(!button){bubble('Ein Inhalt hat sich inzwischen geändert. Lass uns von hier aus weitermachen.');choices([{label:'Lieblingsdesign finden',primary:true,action:discover},{label:'Eine Frage klären',action:help}]);break;}
