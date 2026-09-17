@@ -168,9 +168,10 @@
     const group = element('div', 'choices '+layout);group.setAttribute('role','group');
     const main=items.filter(item=>!item.secondary), secondary=items.filter(item=>item.secondary);
     const visible=main.slice(offset).concat(secondary);
-    visible.forEach(({ label, action, url, external, secondary, primary, heading, kind='choice' }, index) => {
+    visible.forEach(({ label, action, url, external, secondary, primary, heading, preview, kind='choice' }, index) => {
       if(heading)group.append(element('div','group-heading',heading));
       const el = element(url ? 'a' : 'button', 'choice'+(secondary?' choice-secondary':'')+(primary?' choice-primary':''), label);
+      if(preview){try{const imageURL=new URL(preview);if(imageURL.protocol==='https:'){const image=element('img','choice-preview');image.src=imageURL.href;image.alt='';image.loading='lazy';image.addEventListener('error',()=>{image.remove();el.classList.remove('choice-with-preview');},{once:true});const caption=element('span','choice-caption',label);el.replaceChildren(image,caption);el.classList.add('choice-with-preview');}}catch{}}
       el.style.setProperty('--delay', `${Math.min(index,6)*30}ms`);
       if (url) { const u = external ? instagramURL(url) : safe(url); if (!u) return; el.href = u.href; if(external){el.target='_blank';el.rel='noopener noreferrer';} el.addEventListener('click',saveSession); }
       else { el.type = 'button'; el._step={label,kind}; el._action=action; el.onclick = () => { if(group.inert||restoring)return; group.inert=true; respond(label,action,kind); }; }
@@ -183,7 +184,7 @@
     choices([{label:'Lieblingsdesign finden',primary:true,action:discover},{label:'Eine Frage klären',action:help},{label:'Mehr entdecken',action:more}]);
     feed.scrollTop=0; saveSession();
   }
-  function discover(){bubble('Wie möchtest du dein Lieblingsdesign entdecken?');choices([{label:'Was passt zu mir?',action:()=>products(true)},{label:'Bestseller entdecken',action:bestsellers},{label:'Alle Designs entdecken',action:()=>products()},{label:'Meine gemerkten Designs',secondary:true,url:findPage(/wunschliste/i,'/wunschliste')}]);}
+  function discover(){bubble('Wie möchtest du dein Lieblingsdesign entdecken?');choices([{label:'Was passt zu mir?',primary:true,action:()=>products(true)},{label:'Bestseller entdecken',action:bestsellers},{label:'Alle Designs entdecken',action:()=>products()},{label:'Meine gemerkten Designs',secondary:true,url:findPage(/wunschliste/i,'/wunschliste')}]);}
   function help(){bubble('Worum geht es? Ich zeige dir den passenden Weg.');choices([{label:'Anwendung, Pflege & Service',action:faq},{label:'Bestellung oder Problem',action:service},{label:location.pathname.includes('/products/')?'Frage zu diesem Produkt':'Eine Nachricht schreiben',action:()=>{if(location.pathname.includes('/products/'))selected={title:text(document.querySelector('h1')),url:location.pathname};contact(selected?'Produktfrage':'Allgemeine Anfrage');}}]);}
   function openNewsletter(){if(restoring){more();return;}toggle(false);if(window.EyequipmentNewsletterPopup?.open)window.EyequipmentNewsletterPopup.open();else location.href='/?eq_newsletter=1';}
   function more(){bubble('Was möchtest du noch entdecken?');const instagram=instagramLink();choices([{label:'Für Händler',heading:'Weitere Wege',action:dealers},{label:'Seite finden',action:pages},{label:'Über eyequipment',heading:'Inspiration & eyequipment',url:findPage(/.ber-uns/i,'/ueber-uns')},...(instagram?[{label:'Inspiration auf Instagram ↗',url:instagram,external:true}]:[]),{label:'Newsletter',secondary:true,action:openNewsletter}]);}
@@ -226,12 +227,14 @@
   function attributes(product, name) {
     return product.tags.filter(tag=>tag.toLocaleLowerCase('de').startsWith(name.toLocaleLowerCase('de')+':')).map(tag=>tag.slice(tag.indexOf(':')+1).trim()).filter(Boolean);
   }
+  function productTypes(items){const order=['Tücher','Mäppchen'];return [...new Set(items.map(p=>p.productType).filter(Boolean))].sort((a,b)=>{const ai=order.indexOf(a),bi=order.indexOf(b);return (ai<0?order.length:ai)-(bi<0?order.length:bi)||a.localeCompare(b,'de');});}
+  function typePreview(items,type){return items.find(p=>p.productType===type&&p.availableForSale&&p.featuredImage?.url)?.featuredImage.url||items.find(p=>p.productType===type&&p.featuredImage?.url)?.featuredImage.url;}
   async function products(personal = false) {
     const items = await task(loadCatalog); if (!items) return;
     if (!items.length) { bubble('Aktuell habe ich keine verknüpften Produkte gefunden.'); choices([{label:'Shop öffnen',url:findPage(/shop/i,'/shop')}]); return; }
     bubble(personal?'Sehr gerne! Wofür suchst du ein schönes Design?':'Was darf es sein?');
-    const types = [...new Set(items.map(p=>p.productType).filter(Boolean))].sort();
-    choices([...types.map(type=>({label:type,action:()=>productPath(items.filter(p=>p.productType===type),type,personal)})),{label:'Ein Match finden',action:()=>preference(items,null,{Kombination:true})},{label:'Ich bin noch offen',secondary:true,action:()=>productPath(items,null,personal)}]);
+    const types = productTypes(items);
+    choices([...types.map(type=>({label:type,preview:typePreview(items,type),action:()=>productPath(items.filter(p=>p.productType===type),type,personal)})),{label:'Ein Match finden',action:()=>preference(items,null,{Kombination:true})},{label:'Ich bin noch offen',secondary:true,action:()=>productPath(items,null,personal)}]);
   }
   function productPath(items,type,personal) {
     if(personal)return preference(items,type);
@@ -302,7 +305,7 @@
   function chooseCombination(items,type,filters={}) {
     if(!items.length){bubble('Für diese Auswahl gibt es gerade keine Designs.');return choices([{label:'Auswahl ändern',action:()=>products(true)}]);}
     bubble('Zu welchem Design suchst du ein Match? Wähle zuerst deinen Favoriten.');
-    choices(items.slice(0,3).map(p=>({label:p.title,action:()=>relatedTo(p)})).concat(items.length>3?[{label:'Weitere Designs zur Auswahl',secondary:true,action:()=>chooseCombination(items.slice(3),type,filters)}]:[]),0,'selection');
+    choices(items.slice(0,3).map(p=>({label:p.title,preview:p.featuredImage?.url,action:()=>relatedTo(p)})).concat(items.length>3?[{label:'Weitere Designs zur Auswahl',secondary:true,action:()=>chooseCombination(items.slice(3),type,filters)}]:[]),0,'selection');
   }
   async function relatedTo(product) {
     selected=product;bubble(`Ich suche ein Match zu „${product.title}“ – ${product.productType==='Tücher'?'ein Mäppchen':'ein Tuch'}, das dazu passt.`);
@@ -454,9 +457,9 @@
     const all=await task(loadCatalog);if(!all)return;
     if(name==='Kategorie') {
       bubble('Welche Produktart möchtest du? Muster und Farbe bleiben erhalten.');
-      const types=[...new Set(all.map(p=>p.productType).filter(Boolean))].sort();
+      const types=productTypes(all);
       const apply=nextType=>showProducts(rank(all.filter(p=>(!nextType||p.productType===nextType)&&(!filters.Muster||attributes(p,'Muster').includes(filters.Muster))&&(!filters.Farbe||attributes(p,'Farbe').includes(filters.Farbe))&&(!filters.Highlights||isBestseller(p)))),0,nextType,filters);
-      return choices([...types.map(value=>({label:value,action:()=>apply(value)})),{label:'Alle Produktarten',secondary:true,action:()=>apply(null)}]);
+      return choices([...types.map(value=>({label:value,preview:typePreview(all,value),action:()=>apply(value)})),{label:'Alle Produktarten',secondary:true,action:()=>apply(null)}]);
     }
     const updated={...filters};delete updated[name];
     const base=all.filter(p=>(!type||p.productType===type)&&(!updated.Muster||attributes(p,'Muster').includes(updated.Muster))&&(!updated.Farbe||attributes(p,'Farbe').includes(updated.Farbe))&&(!updated.Highlights||isBestseller(p)));
