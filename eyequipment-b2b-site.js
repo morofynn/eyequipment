@@ -395,6 +395,7 @@
 
   const API_VERSION = '2026-07';
   const B2B_MINIMUM_ORDER = 100;
+  const B2B_SHIPPING_FLAT = 10;
   const B2B_TAX_RATE = 0.19;
   const TOKEN_KEYS = ['_sf-customer-token', '_sf_customer_token', '_sf_oauth_tokens', '_sf-oauth-tokens'];
   const CACHE_KEY = '_eyequipment_b2b_cache';
@@ -1553,11 +1554,9 @@
     state.lastCartSummary = cart;
 
     const subtotal = cartMoney(cart, ['cost', 'subtotalAmount']);
-    const shipping = resolvedShippingCost(cart);
     const reportedTax = cartMoney(cart, ['cost', 'totalTaxAmount']);
-    // totalAmount already contains order discounts and any shipping included by
-    // Shopify. Never derive shipping from it: discounts previously reduced the
-    // displayed shipping from 10 EUR to 7 EUR and eventually to 0 EUR.
+    // Shopify's B2B totalAmount already contains the applied discounts and the
+    // configured flat shipping rate, but excludes estimated VAT at this stage.
     const totalBeforeEstimatedTax = cartMoney(cart, ['cost', 'totalAmount'], subtotal);
     const tax = reportedTax > 0 ? reportedTax : totalBeforeEstimatedTax * B2B_TAX_RATE;
     const gross = reportedTax > 0 ? totalBeforeEstimatedTax : totalBeforeEstimatedTax + tax;
@@ -1574,26 +1573,14 @@
     if (costsContainer) {
       const shippingValue = ensureCostRow(costsContainer, 'native-b2b-shipping-row', 'Versand netto');
       const taxValue = ensureCostRow(costsContainer, 'native-b2b-tax-row', 'Umsatzsteuer (19 %)');
-      setNodeText(
-        shippingValue,
-        shipping.known ? formatCartMoney(shipping.amount, currency) : 'Wird im Checkout berechnet',
-      );
-      setNodeText(
-        taxValue,
-        shipping.known ? formatCartMoney(tax, currency) : 'Wird im Checkout berechnet',
-      );
+      setNodeText(shippingValue, formatCartMoney(B2B_SHIPPING_FLAT, currency));
+      setNodeText(taxValue, formatCartMoney(tax, currency));
     }
 
     const totalRow = totalElement?.closest('.cart_total-row');
     const totalLabel = totalRow?.querySelector('.label');
-    setNodeText(
-      totalLabel,
-      shipping.known ? 'Gesamtsumme inkl. USt.' : 'Zwischensumme, zzgl. Versand und USt.',
-    );
-    setNodeText(
-      totalElement,
-      shipping.known ? formatCartMoney(gross, currency) : formatCartMoney(totalBeforeEstimatedTax, currency),
-    );
+    setNodeText(totalLabel, 'Zwischensumme inkl. Versand und USt.');
+    setNodeText(totalElement, formatCartMoney(gross, currency));
 
     const taxHint = document.querySelector('.mwst');
     if (taxHint) taxHint.style.display = 'none';
