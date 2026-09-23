@@ -1517,20 +1517,23 @@
     if (element && element.innerHTML !== value) element.innerHTML = value;
   }
 
-  function selectedShippingCost(cart) {
+  function resolvedShippingCost(cart) {
     const groups = cart?.deliveryGroups?.nodes || cart?.deliveryGroups?.edges?.map(edge => edge?.node) || [];
-    const selected = groups
-      .map(group => group?.selectedDeliveryOption)
-      .filter(Boolean);
-    if (selected.length) {
-      return selected.reduce((sum, option) =>
-        sum + Number(option?.estimatedCost?.amount || 0), 0);
-    }
+    if (!groups.length) return { known: false, amount: 0 };
 
-    const subtotal = cartMoney(cart, ['cost', 'subtotalAmount']);
-    const total = cartMoney(cart, ['cost', 'totalAmount'], subtotal);
-    const reportedTax = cartMoney(cart, ['cost', 'totalTaxAmount']);
-    return Math.max(0, total - subtotal - reportedTax);
+    let amount = 0;
+    for (const group of groups) {
+      const options = group?.deliveryOptions || [];
+      // Shopify may know the only applicable rate before checkout without marking
+      // it as selected. A single option is still an unambiguous dynamic rate.
+      const option = group?.selectedDeliveryOption || (options.length === 1 ? options[0] : null);
+      const optionAmount = Number(option?.estimatedCost?.amount);
+      if (!option || !Number.isFinite(optionAmount)) {
+        return { known: false, amount: 0 };
+      }
+      amount += optionAmount;
+    }
+    return { known: true, amount };
   }
 
   function ensureCostRow(container, className, label) {
@@ -1550,11 +1553,14 @@
     state.lastCartSummary = cart;
 
     const subtotal = cartMoney(cart, ['cost', 'subtotalAmount']);
-    const shipping = selectedShippingCost(cart);
-    const taxableNet = subtotal + shipping;
+    const shipping = resolvedShippingCost(cart);
     const reportedTax = cartMoney(cart, ['cost', 'totalTaxAmount']);
-    const tax = reportedTax > 0 ? reportedTax : taxableNet * B2B_TAX_RATE;
-    const gross = taxableNet + tax;
+    // totalAmount already contains order discounts and any shipping included by
+    // Shopify. Never derive shipping from it: discounts previously reduced the
+    // displayed shipping from 10 EUR to 7 EUR and eventually to 0 EUR.
+    const totalBeforeEstimatedTax = cartMoney(cart, ['cost', 'totalAmount'], subtotal);
+    const tax = reportedTax > 0 ? reportedTax : totalBeforeEstimatedTax * B2B_TAX_RATE;
+    const gross = reportedTax > 0 ? totalBeforeEstimatedTax : totalBeforeEstimatedTax + tax;
     const currency = cart.cost?.subtotalAmount?.currencyCode || 'EUR';
 
     const subtotalElement = document.querySelector('[sf-cart-subtotal]');
@@ -1568,14 +1574,26 @@
     if (costsContainer) {
       const shippingValue = ensureCostRow(costsContainer, 'native-b2b-shipping-row', 'Versand netto');
       const taxValue = ensureCostRow(costsContainer, 'native-b2b-tax-row', 'Umsatzsteuer (19 %)');
-      setNodeText(shippingValue, formatCartMoney(shipping, currency));
-      setNodeText(taxValue, formatCartMoney(tax, currency));
+      setNodeText(
+        shippingValue,
+        shipping.known ? formatCartMoney(shipping.amount, currency) : 'Wird im Checkout berechnet',
+      );
+      setNodeText(
+        taxValue,
+        shipping.known ? formatCartMoney(tax, currency) : 'Wird im Checkout berechnet',
+      );
     }
 
     const totalRow = totalElement?.closest('.cart_total-row');
     const totalLabel = totalRow?.querySelector('.label');
-    setNodeText(totalLabel, 'Gesamtsumme inkl. USt.');
-    setNodeText(totalElement, formatCartMoney(gross, currency));
+    setNodeText(
+      totalLabel,
+      shipping.known ? 'Gesamtsumme inkl. USt.' : 'Zwischensumme, zzgl. Versand und USt.',
+    );
+    setNodeText(
+      totalElement,
+      shipping.known ? formatCartMoney(gross, currency) : formatCartMoney(totalBeforeEstimatedTax, currency),
+    );
 
     const taxHint = document.querySelector('.mwst');
     if (taxHint) taxHint.style.display = 'none';
