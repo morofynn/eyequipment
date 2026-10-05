@@ -53,14 +53,26 @@
   ]);
 
   const ignored = new Set(['SCRIPT', 'STYLE', 'NOSCRIPT', 'TEXTAREA', 'INPUT', 'SELECT', 'OPTION']);
+  const fragments = new Map([
+    ['Bei Fragen zur Verarbeitung Ihrer Daten oder zur Ausübung Ihrer Rechte wenden Sie sich bitte an ', 'Bei Fragen zur Verarbeitung deiner Daten oder zur Ausübung deiner Rechte wende dich bitte an '],
+    ['Um Ihr Widerrufsrecht auszuüben, müssen Sie uns', 'Um dein Widerrufsrecht auszuüben, musst du uns'],
+    ['Name des/der Verbraucher(s): [Name]', 'Name der verbrauchenden Person: [Name]'],
+    ['Anschrift des/der Verbraucher(s): [Anschrift]', 'Anschrift der verbrauchenden Person: [Anschrift]'],
+    ['Unterschrift des/der Verbraucher(s) (nur bei Mitteilung auf Papier):', 'Unterschrift der verbrauchenden Person (nur bei Mitteilung auf Papier):']
+  ]);
 
   function replaceTextNode(node) {
     if (!node?.parentElement || ignored.has(node.parentElement.tagName)) return;
     const original = node.nodeValue;
     const trimmed = original.trim();
     const replacement = replacements.get(trimmed);
-    if (!replacement) return;
-    node.nodeValue = original.replace(trimmed, replacement);
+    if (replacement) {
+      node.nodeValue = original.replace(trimmed, replacement);
+      return;
+    }
+    let updated = original;
+    for (const [source, target] of fragments) updated = updated.replaceAll(source, target);
+    if (updated !== original) node.nodeValue = updated;
   }
 
   function process(root = document.body) {
