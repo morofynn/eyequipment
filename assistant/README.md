@@ -155,3 +155,5 @@ Nach mindestens drei Stunden Abwesenheit wird ein Nutzer mit vorhandenen Wunschl
 Die installierte SDK-Version sendet beim Hinzufügen `cartLoad` unmittelbar vor `cartUpdate`. Ein `cartLoad` aktualisiert deshalb die Vergleichsbasis erst im nächsten Task; das nachfolgende `cartUpdate` erhält noch den alten Warenwert. Tests bilden diese reale Reihenfolge nach, einschließlich B2B-Nettowarenwert.
 
 Produktoption „Frage zu diesem Produkt“ zeigt zuerst Produktdetails, Anwendung/Pflege/FAQ und „Frag uns direkt“. Nur die direkte Anfrage öffnet das vorhandene Kontaktformular; Produktname im Betreff und der Produktlink bleiben auch nach dem FAQ-Weg oder Wiederherstellung erhalten.
+
+Die automatische Newsletter-Einladung nennt den einmaligen 15%-Rabatt für Neukunden und hebt ihn semantisch mit `<strong>` hervor.

@@ -131,7 +131,7 @@
     if(restoring){more();return;}
     newsletterPending=false;try{sessionStorage.removeItem(pendingNewsletterKey);}catch{}updateBadge();if(!newsletterEligible())return;
     if(feed.querySelector('.newsletter-invitation'))return;
-    const invitation=element('div','bubble newsletter-invitation');invitation.append(element('p','','Lust auf neue Designs und Inspiration? Mit unserem Newsletter bleibst du auf dem Laufenden. Möchtest du dich anmelden?'));
+    const invitation=element('div','bubble newsletter-invitation'),copy=element('p');copy.append(document.createTextNode('Lust auf neue Designs und Inspiration? Mit unserem Newsletter bleibst du auf dem Laufenden und erhältst einen '),element('strong','','einmaligen 15% Rabatt für Neukunden'),document.createTextNode('. Möchtest du dich anmelden?'));invitation.append(copy);
     const buttons=element('div','newsletter-actions');
     const yes=element('button','choice choice-primary','Ja, gerne'),no=element('button','choice choice-secondary','Gerade nicht');yes.type=no.type='button';
     yes.onclick=()=>{remember(newsletterKey,Date.now()+86400000);invitation.remove();openNewsletter();};
