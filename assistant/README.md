@@ -156,4 +156,8 @@ Die installierte SDK-Version sendet beim Hinzufügen `cartLoad` unmittelbar vor 
 
 Produktoption „Frage zu diesem Produkt“ zeigt zuerst Produktdetails, Anwendung/Pflege/FAQ und „Frag uns direkt“. Nur die direkte Anfrage öffnet das vorhandene Kontaktformular; Produktname im Betreff und der Produktlink bleiben auch nach dem FAQ-Weg oder Wiederherstellung erhalten.
 
-Die automatische Newsletter-Einladung nennt den einmaligen 15%-Rabatt für Neukunden und hebt ihn semantisch mit `<strong>` hervor.
+Die automatische Newsletter-Einladung nennt den einmaligen 15%-Rabatt für Neukund*innen und hebt ihn semantisch mit `<strong>` hervor.
+
+## Ansprache und Gender-Schreibweise
+
+Alle sichtbaren Texte sprechen Besucher*innen mit „du/dein“ an und gendern Personenbezeichnungen mit Sternchen. Das umfasst den Assistenten, Newsletter-Hinweise, Händler*innen-Navigation, B2B-Mengen- und Warenkorbmeldungen sowie die ergänzende Sprach-Runtime für statische und nachgeladene Webflow-Inhalte. Formularwerte, technische Selektoren und fremde Produktdaten bleiben unverändert, wenn ihre exakte Schreibweise für die Integration benötigt wird.

@@ -1212,10 +1212,10 @@
   // Read the same contextual variants used by native product modules.
   state.getMatchVariants = async function(productId) {
     if (!(await ensureStatus()) || state.switching || state.cartContextError || state.statusError) {
-      throw new Error('Der Händler-Warenkorb ist noch nicht bereit.');
+      throw new Error('Der Händler*innen-Warenkorb ist noch nicht bereit.');
     }
     const product = await fetchContextualNode(productId);
-    if (!product?.variants?.nodes?.length) throw new Error('Händler-Produktdaten fehlen.');
+    if (!product?.variants?.nodes?.length) throw new Error('Händler*innen-Produktdaten fehlen.');
     return product.variants.nodes;
   };
   state.selectCompanyLocation = async function(locationId) {

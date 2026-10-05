@@ -131,7 +131,7 @@
     if(restoring){more();return;}
     newsletterPending=false;try{sessionStorage.removeItem(pendingNewsletterKey);}catch{}updateBadge();if(!newsletterEligible())return;
     if(feed.querySelector('.newsletter-invitation'))return;
-    const invitation=element('div','bubble newsletter-invitation'),copy=element('p');copy.append(document.createTextNode('Lust auf neue Designs und Inspiration? Mit unserem Newsletter bleibst du auf dem Laufenden und erhältst einen '),element('strong','','einmaligen 15% Rabatt für Neukunden'),document.createTextNode('. Möchtest du dich anmelden?'));invitation.append(copy);
+    const invitation=element('div','bubble newsletter-invitation'),copy=element('p');copy.append(document.createTextNode('Lust auf neue Designs und Inspiration? Mit unserem Newsletter bleibst du auf dem Laufenden und erhältst einen '),element('strong','','einmaligen 15% Rabatt für Neukund*innen'),document.createTextNode('. Möchtest du dich anmelden?'));invitation.append(copy);
     const buttons=element('div','newsletter-actions');
     const yes=element('button','choice choice-primary','Ja, gerne'),no=element('button','choice choice-secondary','Gerade nicht');yes.type=no.type='button';
     yes.onclick=()=>{remember(newsletterKey,Date.now()+86400000);invitation.remove();openNewsletter();};
@@ -202,7 +202,7 @@
   function discover(){bubble('Wie möchtest du dein Lieblingsdesign entdecken?');choices([{label:'Was passt zu mir?',primary:true,action:()=>products(true)},{label:'Bestseller entdecken',action:bestsellers},{label:'Alle Designs entdecken',action:()=>products()},{label:'Meine gemerkten Designs',secondary:true,url:findPage(/wunschliste/i,'/wunschliste')}]);}
   function help(){bubble('Worum geht es? Ich zeige dir den passenden Weg.');choices([{label:'Anwendung, Pflege & Service',action:faq},{label:'Bestellung oder Problem',action:service},{label:location.pathname.includes('/products/')?'Frage zu diesem Produkt':'Eine Nachricht schreiben',action:()=>{if(location.pathname.includes('/products/'))selected={title:text(document.querySelector('h1')),url:location.pathname};contact(selected?'Produktfrage':'Allgemeine Anfrage');}}]);}
   function openNewsletter(){if(restoring){more();return;}toggle(false);if(window.EyequipmentNewsletterPopup?.open)window.EyequipmentNewsletterPopup.open();else location.href='/?eq_newsletter=1';}
-  function more(){bubble('Was möchtest du noch entdecken?');const instagram=instagramLink();choices([{label:'Für Händler',heading:'Weitere Wege',action:dealers},{label:'Seite finden',action:pages},{label:'Über eyequipment',heading:'Inspiration & eyequipment',url:findPage(/.ber-uns/i,'/ueber-uns')},...(instagram?[{label:'Inspiration auf Instagram ↗',url:instagram,external:true}]:[]),{label:'Newsletter',secondary:true,action:openNewsletter}]);}
+  function more(){bubble('Was möchtest du noch entdecken?');const instagram=instagramLink();choices([{label:'Für Händler*innen',heading:'Weitere Wege',action:dealers},{label:'Seite finden',action:pages},{label:'Über eyequipment',heading:'Inspiration & eyequipment',url:findPage(/.ber-uns/i,'/ueber-uns')},...(instagram?[{label:'Inspiration auf Instagram ↗',url:instagram,external:true}]:[]),{label:'Newsletter',secondary:true,action:openNewsletter}]);}
   async function task(work) {
     const id = ++ticket, loading = typing();
     try { const result = await work(); loading.remove(); return id === ticket ? result : undefined; }
@@ -427,7 +427,7 @@
         }
         const amount=new Intl.NumberFormat('de-DE',{style:'currency',currency:note.currency,minimumFractionDigits:0,maximumFractionDigits:2}).format(note.threshold);
         const message=element('div','bubble milestone-reward'),headline=element('strong','milestone-headline','Geschafft! 🎉'),value=element('strong','milestone-amount',amount);
-        message.append(headline,document.createTextNode(note.kind==='minimum'?'Dein Warenkorb hat den Mindestbestellwert von ':'Dein Warenkorb hat die Gratisversand-Grenze von '),value,document.createTextNode(note.kind==='minimum'?' netto erreicht. ':' erreicht. '),element('strong','',note.kind==='minimum'?'Deine Händlerbestellung kann losgehen!':'Der Versand geht auf uns!'),document.createTextNode(' :)'));
+        message.append(headline,document.createTextNode(note.kind==='minimum'?'Dein Warenkorb hat den Mindestbestellwert von ':'Dein Warenkorb hat die Gratisversand-Grenze von '),value,document.createTextNode(note.kind==='minimum'?' netto erreicht. ':' erreicht. '),element('strong','',note.kind==='minimum'?'Deine Händler*innen-Bestellung kann losgehen!':'Der Versand geht auf uns!'),document.createTextNode(' :)'));
         section.append(message);
         const button=element('button','context-share-button','Warenkorb ansehen');button.type='button';button.onclick=()=>{toggle(false);window.Shopyflow?.openCart?.();};section.append(button);feed.append(section);if(note.unread)focusNotice(section);note.unread=false;
       }saveMilestones();updateBadge();position();
@@ -467,7 +467,7 @@
       if(!variants.length||wasB2B&&variants.some(v=>!v.quantityRule))throw Error();
       const select=element('select');select.setAttribute('aria-label',`Variante für ${product.title}`);for(const v of variants){const option=element('option','',v.title);option.value=v.id;select.append(option);}if(variants.length>1)card.insertBefore(select,status);
       const chosen=()=>variants.find(v=>v.id===select.value),amount=rule=>Math.ceil(Math.max(1,Number(rule?.minimum)||1)/Math.max(1,Number(rule?.increment)||1))*Math.max(1,Number(rule?.increment)||1);
-      const update=()=>{status.textContent=wasB2B?`${amount(chosen().quantityRule)} × · Händlermenge`:'';};select.onchange=update;update();button.disabled=false;
+      const update=()=>{status.textContent=wasB2B?`${amount(chosen().quantityRule)} × · Händler*innen-Menge`:'';};select.onchange=update;update();button.disabled=false;
       button.onclick=async()=>{
         if(restoring||offerBuying||matchBuying||button.disabled)return;offerBuying=true;button.disabled=true;button.textContent='Wird ergänzt …';
         try{
@@ -509,7 +509,7 @@
         const chosen=()=>variants.find(v=>v.id===select.value),amount=()=>{const rule=chosen().quantityRule,step=Math.max(1,Number(rule?.increment)||1);return Math.ceil(Math.max(1,Number(rule?.minimum)||1)/step)*step;};
         const update=()=>{quantity.textContent=`${amount()} ×`;};select.onchange=update;update();selections.push({chosen,amount});
       }
-      status.textContent=b2b?.isB2B?'Die Händler-Mindestmenge gilt je Produkt.':'Je ein Produkt – ein Tuch und ein Mäppchen.';button.disabled=false;
+      status.textContent=b2b?.isB2B?'Die Händler*innen-Mindestmenge gilt je Produkt.':'Je ein Produkt – ein Tuch und ein Mäppchen.';button.disabled=false;
       // Commerce actions are deliberately outside replayable chat choices.
       button.onclick=async()=>{
         if(restoring||matchBuying||offerBuying||button.disabled)return;matchBuying=true;button.disabled=true;buttonLabel.textContent='Wird hinzugefügt …';
@@ -663,19 +663,19 @@
   }
   function pages() {
     nav=navigation(document);bubble('Wohin möchtest du? Die Links sind nach Thema gruppiert.');
-    const groups=[{title:'Shop & Konto',test:/shop|konto|wunschliste/i},{title:'Hilfe & Kontakt',test:/faq|kontakt|widerruf|bfsg/i},{title:'Über uns & Händler',test:/ueber|h.ndler/i},{title:'Rechtliches & weitere Seiten',test:/.*/}];
+    const groups=[{title:'Shop & Konto',test:/shop|konto|wunschliste/i},{title:'Hilfe & Kontakt',test:/faq|kontakt|widerruf|bfsg/i},{title:'Über uns & Händler*innen',test:/ueber|h.ndler/i},{title:'Rechtliches & weitere Seiten',test:/.*/}];
     const remaining=new Set(nav);
     const items=groups.flatMap(group=>{const links=[...remaining].filter(n=>group.test.test(n.title+' '+n.url));links.forEach(n=>remaining.delete(n));return links.map((n,index)=>({label:n.title,url:n.url,heading:index===0?group.title:null}));});
     choices(items,0,'page-links');
   }
   function service() { bubble('Wobei brauchst du Hilfe?'); choices([{label:'Meine Bestellungen ansehen',url:findPage(/konto/i,'/konto')},...['Lieferung fehlt','Artikel beschädigt oder falsch','Rückgabe / Widerruf','Problem beim Bestellen','Problem mit dem Konto'].map(label=>({label,action:()=>contact(label)})),{label:'Versand & Serviceantworten',action:faq}]); }
-  function dealers() { bubble('Hier findest du die Händlerbereiche. Deine individuellen Preise, Mindestmengen und Standorte werden im angemeldeten Shop angezeigt.'); choices([{label:'Händler werden',primary:true,action:()=>contact('Händlerantrag',true)},{label:'Infos für Händler',secondary:true,url:findPage(/h.ndler/i,'/haendler-werden')},{label:'Zum Kundenkonto',url:findPage(/konto/i,'/konto')},{label:'Frage als Händler',action:()=>contact('Händleranfrage')}]); }
+  function dealers() { bubble('Hier findest du die Bereiche für Händler*innen. Deine individuellen Preise, Mindestmengen und Standorte werden im angemeldeten Shop angezeigt.'); choices([{label:'Händler*in werden',primary:true,action:()=>contact('Händlerantrag',true)},{label:'Infos für Händler*innen',secondary:true,url:findPage(/h.ndler/i,'/haendler-werden')},{label:'Zum Kundenkonto',url:findPage(/konto/i,'/konto')},{label:'Frage als Händler*in',action:()=>contact('Händleranfrage')}]); }
   function contact(subject = 'Allgemeine Anfrage',dealer=false) {
     feed.querySelectorAll('iframe').forEach(frame=>frame.remove());
-    ticket++; bubble(dealer?'Schön, dass du eyequipment in deinem Store anbieten möchtest! Füll hier deinen Händlerantrag aus. Wir melden uns bei dir und klären gemeinsam die nächsten Schritte.':'Wir helfen dir gerne persönlich weiter. Schreib uns kurz, worum es geht. Wenn du lieber telefonieren möchtest, ergänze deine Nummer und einen Rückrufwunsch in der Nachricht.');
+    ticket++; bubble(dealer?'Schön, dass du eyequipment in deinem Store anbieten möchtest! Füll hier deinen Antrag für Händler*innen aus. Wir melden uns bei dir und klären gemeinsam die nächsten Schritte.':'Wir helfen dir gerne persönlich weiter. Schreib uns kurz, worum es geht. Wenn du lieber telefonieren möchtest, ergänze deine Nummer und einen Rückrufwunsch in der Nachricht.');
     const url = safe(dealer?findPage(/h.ndler/i,'/haendler-werden'):findPage(/kontakt/i,'/kontakt')); if (!url) return;
     const loading=typing();
-    const frame=element('iframe','form-frame'); frame.title=dealer?'eyequipment Händlerantrag':'eyequipment Kontaktformular'; frame.src=url.href; frame.style.height='1px';
+    const frame=element('iframe','form-frame'); frame.title=dealer?'eyequipment Antrag für Händler*innen':'eyequipment Kontaktformular'; frame.src=url.href; frame.style.height='1px';
     let prepared=false;
     const timeout=setTimeout(()=>{if(!prepared&&frame.isConnected){frame.remove();loading.remove();bubble('Das Formular braucht gerade etwas länger. Du kannst es direkt auf der Seite öffnen.');}},15000);
     frame.onload=()=>{
@@ -705,9 +705,9 @@
         prepared=true;
         clearTimeout(timeout);
         requestAnimationFrame(()=>requestAnimationFrame(()=>{loading.remove();frame.classList.add('ready');}));
-      } catch { clearTimeout(timeout); loading.remove(); frame.remove(); bubble(dealer?'Bitte öffne deinen Händlerantrag direkt auf der Händlerseite.':'Bitte öffne unser Kontaktformular direkt.'); }
+      } catch { clearTimeout(timeout); loading.remove(); frame.remove(); bubble(dealer?'Bitte öffne deinen Antrag für Händler*innen direkt auf der Händlerseite.':'Bitte öffne unser Kontaktformular direkt.'); }
     };
-    feed.append(frame); choices([{label:dealer?'Händlerseite direkt öffnen':'Kontaktseite direkt öffnen',url:url.href}]); feed.scrollTop=Math.max(0,frame.offsetTop-feed.offsetTop-130);
+    feed.append(frame); choices([{label:dealer?'Seite für Händler*innen öffnen':'Kontaktseite direkt öffnen',url:url.href}]); feed.scrollTop=Math.max(0,frame.offsetTop-feed.offsetTop-130);
   }
   let positionFrame=0;
   let pendingSession=null;
