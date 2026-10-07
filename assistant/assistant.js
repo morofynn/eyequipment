@@ -436,7 +436,11 @@
         if([...feed.querySelectorAll('[data-cart-note]')].some(el=>el.dataset.cartNote===note.id))continue;
         const source=items.find(p=>numericId(p.id)===note.sourceId);if(!source){note.unread=false;continue;}
         const section=element('section','cart-offer-note');section.dataset.cartNote=note.id;
-        section.append(element('div','bubble',`Hey, du hast „${source.title}“ in den Warenkorb gelegt. Dazu könnten diese Designs gut passen:`));
+        const message=element('div','bubble cart-source-message'),copy=element('p','cart-source-copy'),sourceLink=element('a','cart-source-link');
+        sourceLink.href=safe(source.url).href;sourceLink.append(element('strong','',source.title));sourceLink.addEventListener('click',saveSession);
+        copy.append(document.createTextNode('Hey, du hast „'),sourceLink,document.createTextNode('“ in deinen Warenkorb gelegt. Dazu könnten diese Designs gut passen:'));
+        if(source.featuredImage?.url){try{const imageUrl=new URL(source.featuredImage.url);if(imageUrl.protocol==='https:'){const image=element('img','cart-source-image');image.src=imageUrl.href;image.alt='';image.setAttribute('aria-hidden','true');image.loading='lazy';image.onerror=()=>image.remove();message.append(image);}}catch{}}
+        message.append(copy);section.append(message);
         const row=element('div','cart-offer-row');row.setAttribute('role','list');row.setAttribute('aria-label','Passende Produktempfehlungen');
         for(const offer of note.offers){
           const product=items.find(p=>numericId(p.id)===offer.id&&p.availableForSale);if(!product)continue;

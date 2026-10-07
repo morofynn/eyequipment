@@ -93,6 +93,11 @@ button:focus-visible, a:focus-visible { outline: 3px solid #777; outline-offset:
 .product-head .brand { font-size:26px; line-height:1.15; overflow-wrap:anywhere; }
 .product-head .sub { line-height:1.4; max-width:230px; }
 .context-image { position:absolute; z-index:-1; right:0; top:0; width:52%; height:100%; object-fit:cover; object-position:center; opacity:.85; mask-image:linear-gradient(to right,transparent,#000 65%); }
+.cart-source-message { position:relative; isolation:isolate; overflow:hidden; background:#fff3e6; border:1px solid #e5d6c3; }
+.cart-source-copy { position:relative; margin:0; }
+.cart-source-image { position:absolute; z-index:-1; right:0; top:0; width:52%; height:100%; object-fit:cover; object-position:center; opacity:.25; mask-image:linear-gradient(to right,transparent,#000 75%); pointer-events:none; }
+.cart-source-link { color:inherit; text-decoration:underline; text-decoration-thickness:1px; text-underline-offset:3px; border-radius:3px; transition:color .18s,background .18s; }
+.cart-source-link:hover { color:#684a2a; background:#ffffff80; }
 .product-head .close { position:relative; background:#ffffffe6; }
 .context-actions { display:grid; gap:6px; grid-template-columns:1fr 1fr; }
 .context-button { border:1px solid #b9a38b; border-radius:10px; background:#fffaf4; padding:8px; font-size:11px; line-height:1.4; text-align:left; color:#171717; }
