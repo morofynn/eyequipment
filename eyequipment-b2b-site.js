@@ -1282,11 +1282,8 @@
     const normalizedId = idNumber(variantId);
     if (!normalizedId || !rule) return null;
 
-    const existing = variantRules.get(normalizedId);
-    if (existing && Number(existing.minimum) > Number(rule.minimum || 1)) {
-      return existing;
-    }
-
+    // Native catalog rules may decrease for remaining stock and increase after
+    // replenishment. Do not retain an older, larger minimum indefinitely.
     variantRules.set(normalizedId, rule);
     return rule;
   }
