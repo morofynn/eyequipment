@@ -10,12 +10,14 @@ export async function signup(request,env) {
   if (!email || input.consent!==true) return json({error:'Bitte gib eine gültige E-Mail-Adresse ein und bestätige die Anmeldung.'},400);
   if (input.website) return json({message:acknowledgement});
   const db=env.DB, now=Math.floor(Date.now()/1000);
+  let reservedEmailKey;
   try {
     if (!await rateLimit(db,'global-signups',30,3600,now)) return json({error:'Bitte versuche es später erneut.'},429);
     const ip=request.headers.get('CF-Connecting-IP');
     const emailKey=await hash(env.RATE_LIMIT_SECRET+':'+email);
     if (ip && !await rateLimit(db,'ip:'+await hash(env.RATE_LIMIT_SECRET+':'+ip),8,3600,now)) return json({error:'Bitte versuche es später erneut.'},429);
     if (!await rateLimit(db,'email:'+emailKey,1,900,now)) return json({message:acknowledgement});
+    reservedEmailKey='email:'+emailKey;
     await db.prepare('DELETE FROM confirmations WHERE expires<?').bind(now).run();
     await db.prepare('DELETE FROM limits WHERE expires<?').bind(now).run();
     const customerId=await pendingCustomer(env,email);
@@ -32,6 +34,7 @@ export async function signup(request,env) {
     }
     return json({message:acknowledgement});
   } catch(error) {
+    if (reservedEmailKey) await db.prepare('DELETE FROM limits WHERE key=?').bind(reservedEmailKey).run().catch(()=>{});
     const code=['SHOPIFY','SHOPIFY_AUTH'].includes(error?.message)?error.message:'STORAGE_OR_RUNTIME';
     console.warn('newsletter_signup_failed',code);
     return json({error:'Die Anmeldung konnte nicht abgeschlossen werden. Bitte versuche es später erneut.'},503);
