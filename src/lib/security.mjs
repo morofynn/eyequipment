@@ -27,5 +27,5 @@ export async function body(request) {
   return JSON.parse(text);
 }
 export function ready(env) {
-  return env.ENABLED === 'true' && env.PUBLIC_ORIGIN?.startsWith('https://') && env.DB && env.SHOPIFY_ADMIN_TOKEN && env.RATE_LIMIT_SECRET?.length >= 32 && /^[a-z0-9-]+\.kasserver\.com$/i.test(env.SMTP_HOST||'') && env.SMTP_USERNAME && env.SMTP_PASSWORD && normalizeEmail(env.MAIL_FROM);
+  return env.ENABLED === 'true' && env.PUBLIC_ORIGIN?.startsWith('https://') && env.DB && (env.SHOPIFY_ADMIN_TOKEN || (env.SHOPIFY_CLIENT_ID && env.SHOPIFY_CLIENT_SECRET)) && env.RATE_LIMIT_SECRET?.length >= 32 && /^[a-z0-9-]+\.kasserver\.com$/i.test(env.SMTP_HOST||'') && env.SMTP_USERNAME && env.SMTP_PASSWORD && normalizeEmail(env.MAIL_FROM);
 }

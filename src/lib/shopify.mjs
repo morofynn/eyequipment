@@ -2,8 +2,20 @@ export const lookupQuery = `query NewsletterCustomer($query:String!) { customers
 export const createMutation = `mutation NewsletterCreate($input:CustomerInput!) { customerCreate(input:$input) { customer { id } userErrors { message } } }`;
 export const consentMutation = `mutation NewsletterConsent($input:CustomerEmailMarketingConsentUpdateInput!) { customerEmailMarketingConsentUpdate(input:$input) { customer { id } userErrors { message } } }`;
 export const statusQuery = `query NewsletterConfirmation($id:ID!) { customer(id:$id) { id defaultEmailAddress { marketingState } } }`;
+let cachedToken;
+export async function accessToken(env,fetcher=fetch) {
+  if(env.SHOPIFY_ADMIN_TOKEN)return env.SHOPIFY_ADMIN_TOKEN;
+  if(cachedToken?.client===env.SHOPIFY_CLIENT_ID && cachedToken.expires>Date.now()+60000)return cachedToken.value;
+  const response=await fetcher('https://k4csqj-h1.myshopify.com/admin/oauth/access_token',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:new URLSearchParams({grant_type:'client_credentials',client_id:env.SHOPIFY_CLIENT_ID,client_secret:env.SHOPIFY_CLIENT_SECRET}),signal:AbortSignal.timeout(10000)});
+  if(!response.ok)throw Error('SHOPIFY_AUTH');
+  const data=await response.json();
+  if(!data.access_token || !data.expires_in)throw Error('SHOPIFY_AUTH');
+  cachedToken={client:env.SHOPIFY_CLIENT_ID,value:data.access_token,expires:Date.now()+data.expires_in*1000};
+  return cachedToken.value;
+}
 export async function graphql(env, query, variables, fetcher=fetch) {
-  const response = await fetcher('https://k4csqj-h1.myshopify.com/admin/api/2026-10/graphql.json', {method:'POST',headers:{'Content-Type':'application/json','X-Shopify-Access-Token':env.SHOPIFY_ADMIN_TOKEN},body:JSON.stringify({query,variables}),signal:AbortSignal.timeout(10000)});
+  const token=await accessToken(env,fetcher);
+  const response = await fetcher('https://k4csqj-h1.myshopify.com/admin/api/2026-10/graphql.json', {method:'POST',headers:{'Content-Type':'application/json','X-Shopify-Access-Token':token},body:JSON.stringify({query,variables}),signal:AbortSignal.timeout(10000)});
   if (!response.ok) throw Error('SHOPIFY');
   const result = await response.json();
   if (result.errors || !result.data) throw Error('SHOPIFY');

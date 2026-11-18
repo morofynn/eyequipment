@@ -7,7 +7,7 @@ Separate GitHub branch `newsletter-cloud`; no changes to the site's main branch.
 - ENABLED: `false` until configured and tested.
 - PUBLIC_ORIGIN: `https://eyequipment.webflow.io` for staging; production later uses its canonical origin.
 - MOUNT_PATH: `/newsletter-service`
-- SHOPIFY_ADMIN_TOKEN (secret): installed app token with read_customers and write_customers; do not use the connector's credentials.
+- SHOPIFY_CLIENT_ID and SHOPIFY_CLIENT_SECRET (secret): credentials of the separate Newsletter Cloud app, installed in the same Shopify organization/store with read_customers and write_customers. The server exchanges them for a 24-hour access token and renews it as needed. Alternatively an existing SHOPIFY_ADMIN_TOKEN is supported. Never use connector credentials.
 - RATE_LIMIT_SECRET (secret): independently generated random value, at least 32 characters.
 - SMTP_HOST: the actual ALL-INKL KAS server, such as the server shown in the mailbox settings; never guess the account-specific hostname.
 - SMTP_USERNAME, SMTP_PASSWORD (secrets): ALL-INKL mailbox SMTP login. No KAS account password.
@@ -31,4 +31,4 @@ The private data retained temporarily are the Shopify customer ID and salted has
 4. Switch the Webflow popup from window.open to same-origin fetch. Keep 30-second timing.
 5. Publish production only once the complete path is verified. No Shopify theme publication is needed.
 
-Current state: local server build and seven unit/protocol tests pass. Shopify GraphQL operations validated against 2026-10. No production Cloud deployment, credentials or live SMTP test yet. Frontend still uses the older staging window flow until the backend is operational.
+Current state: local server build and nine unit/protocol/frontend tests pass. Shopify GraphQL operations validated against 2026-10. No production Cloud deployment, credentials or live SMTP test yet. The new same-origin popup runtime is published to Webflow staging and displays a real unavailable error while the backend is disabled. No production website publication yet.

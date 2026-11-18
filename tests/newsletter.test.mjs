@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {normalizeEmail,newToken,hash,validOrigin,ready} from '../src/lib/security.mjs';
 import {mime,sendSmtp} from '../src/lib/smtp.mjs';
 import {signup,confirm} from '../src/lib/handlers.mjs';
-import {pendingCustomer,consentMutation} from '../src/lib/shopify.mjs';
+import {pendingCustomer,consentMutation,accessToken} from '../src/lib/shopify.mjs';
 test('strict email/origin validation and random hashed tokens',async()=>{
   assert.equal(normalizeEmail(' TEST+shop@Example.com '),'test+shop@example.com');
   for(const email of ['a@b','a@b.com\r\nBcc: victim@example.com','bad <a@b.com>'])assert.equal(normalizeEmail(email),null);
@@ -15,11 +15,16 @@ test('no success acknowledgement when server is not configured',async()=>{
   assert.equal(ready({}),false);const response=await signup(request,{PUBLIC_ORIGIN:'https://eyequipment.webflow.io'});assert.equal(response.status,503);assert.match((await response.json()).error,/nicht verfügbar/);
 });
 test('already subscribed customer is preserved without mutations or duplicate welcome reset',async()=>{
-  let calls=0;const customer=await pendingCustomer({},'test@example.com',async(url,options)=>{calls++;assert(!JSON.parse(options.body).query.includes('mutation'));return Response.json({data:{customers:{nodes:[{id:'gid://shopify/Customer/1',defaultEmailAddress:{emailAddress:'test@example.com',marketingState:'SUBSCRIBED'}}]}}});});assert.equal(customer,null);assert.equal(calls,1);
+  let calls=0;const customer=await pendingCustomer({SHOPIFY_ADMIN_TOKEN:'test'},'test@example.com',async(url,options)=>{calls++;assert(!JSON.parse(options.body).query.includes('mutation'));return Response.json({data:{customers:{nodes:[{id:'gid://shopify/Customer/1',defaultEmailAddress:{emailAddress:'test@example.com',marketingState:'SUBSCRIBED'}}]}}});});assert.equal(customer,null);assert.equal(calls,1);
 });
 test('new customer is pending until proof of mailbox control',async()=>{
-  const requests=[];await pendingCustomer({},'test@example.com',async(url,options)=>{const data=JSON.parse(options.body);requests.push(data);return requests.length===1?Response.json({data:{customers:{nodes:[]}}}):Response.json({data:{customerCreate:{customer:{id:'gid://shopify/Customer/1'},userErrors:[]}}});});
+  const requests=[];await pendingCustomer({SHOPIFY_ADMIN_TOKEN:'test'},'test@example.com',async(url,options)=>{const data=JSON.parse(options.body);requests.push(data);return requests.length===1?Response.json({data:{customers:{nodes:[]}}}):Response.json({data:{customerCreate:{customer:{id:'gid://shopify/Customer/1'},userErrors:[]}}});});
   assert.equal(requests[1].variables.input.emailMarketingConsent.marketingState,'PENDING');assert.deepEqual(requests[1].variables.input.tags,['newsletter']);
+});
+test('own-store client credentials are server-side and reuse a valid expiring token',async()=>{
+  let calls=0;const fetcher=async(url,options)=>{calls++;assert.equal(new URLSearchParams(options.body).get('grant_type'),'client_credentials');return Response.json({access_token:'test-only-token',expires_in:86399});};
+  const env={SHOPIFY_CLIENT_ID:'test-client',SHOPIFY_CLIENT_SECRET:'test-secret'};
+  assert.equal(await accessToken(env,fetcher),'test-only-token');assert.equal(await accessToken(env,fetcher),'test-only-token');assert.equal(calls,1);
 });
 test('reused or expired confirmation cannot reach Shopify',async()=>{
   const env={ENABLED:'true',PUBLIC_ORIGIN:'https://eyequipment.webflow.io',SHOPIFY_ADMIN_TOKEN:'test',RATE_LIMIT_SECRET:'x'.repeat(32),SMTP_HOST:'w0123456.kasserver.com',SMTP_USERNAME:'test',SMTP_PASSWORD:'test',MAIL_FROM:'info@eyequipment.com',DB:{prepare(){return {bind(){return this;},async first(){return null;}}}}};
