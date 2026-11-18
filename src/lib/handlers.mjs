@@ -21,7 +21,10 @@ export async function signup(request,env) {
     await db.prepare('DELETE FROM confirmations WHERE expires<?').bind(now).run();
     await db.prepare('DELETE FROM limits WHERE expires<?').bind(now).run();
     const customerId=await pendingCustomer(env,email);
-    if (!customerId) return json({message:acknowledgement});
+    if (!customerId) {
+      await db.prepare('DELETE FROM limits WHERE key=?').bind(reservedEmailKey).run();
+      return json({message:acknowledgement});
+    }
     const token=newToken(), tokenHash=await hash(token);
     await db.prepare('DELETE FROM confirmations WHERE email_hash=?').bind(emailKey).run();
     await db.prepare('INSERT INTO confirmations(token_hash,customer_id,email_hash,consent_version,created,expires) VALUES (?,?,?,?,?,?)').bind(tokenHash,customerId,emailKey,consentVersion,now,now+86400).run();
