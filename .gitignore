@@ -1,3 +1,6 @@
 node_modules/
-.DS_Store
-assistant/webflow-footer.html
+dist/
+.astro/
+.wrangler/
+.env*
+dev.vars

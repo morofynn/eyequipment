@@ -1,45 +1,34 @@
-# eyequipment website scripts
+# eyequipment Newsletter – Webflow Cloud
 
-Public browser scripts for the eyequipment Webflow / Storesynk storefront.
+Separate GitHub branch `newsletter-cloud`; no changes to the site's main branch. Mount at `/newsletter-service` on the existing eyequipment Webflow site. Initial environment uses only `https://eyequipment.webflow.io` as PUBLIC_ORIGIN. Do not enable production before a complete confirmation and welcome-discount test.
 
-- `eyequipment-b2b-site.js`: existing B2B storefront integration.
-- `eyequipment-assistant.js`: generated assistant bundle, including styles.
-- `assistant/assistant.js` and `assistant/assistant.css`: editable assistant sources.
+## Server variables
 
-## Build the assistant
+- ENABLED: `false` until configured and tested.
+- PUBLIC_ORIGIN: `https://eyequipment.webflow.io` for staging; production later uses its canonical origin.
+- MOUNT_PATH: `/newsletter-service`
+- SHOPIFY_ADMIN_TOKEN (secret): installed app token with read_customers and write_customers; do not use the connector's credentials.
+- RATE_LIMIT_SECRET (secret): independently generated random value, at least 32 characters.
+- SMTP_HOST: the actual ALL-INKL KAS server, such as the server shown in the mailbox settings; never guess the account-specific hostname.
+- SMTP_USERNAME, SMTP_PASSWORD (secrets): ALL-INKL mailbox SMTP login. No KAS account password.
+- MAIL_FROM: `info@eyequipment.com`, authorized for that mailbox.
 
-Use Node.js and install the pinned build dependency:
+Do not put any secret in GitHub, PUBLIC_ variables, frontend JavaScript or logs. ALL-INKL delivery uses TLS on port 465 through the Workers TCP socket API. This must be tested on Webflow Cloud; local Node cannot import cloudflare:sockets. No additional mail provider.
 
-```sh
-npm install
-npm run build:assistant
-```
+## Flow
 
-Alternatively pass a local Terser UMD bundle path to `node assistant/build.cjs`.
-The build writes `eyequipment-assistant.js` in the repository root and an inline
-preview/fallback in `assistant/webflow-footer.html`.
+POST api/signup accepts JSON `{email,consent:true,website:""}`. Same-origin only, durable per-IP/per-email rate limits and a honeypot. New profiles remain PENDING. Existing subscribed profiles are left unchanged; previous welcome tags are retained. Only a successful SMTP acceptance yields the acknowledgement. SMTP acceptance does not prove inbox delivery.
 
-## Webflow integration
+Confirmation tokens contain 256 random bits, are stored only as hashes in SQLite and expire after 24 hours. The email link passes the token in the URL fragment, so it is not included in server access logs. GET never changes consent (mail scanner safe); the confirmation page requires an explicit click and POST. A lease prevents concurrent confirmations, and revoked subscriptions are not silently reactivated. Shopify is updated to SUBSCRIBED/CONFIRMED_OPT_IN only after verification. Existing Shopify welcome automation must be tested with this Admin API transition.
 
-Load the B2B file in the head and the assistant file in the footer using jsDelivr:
+The private data retained temporarily are the Shopify customer ID and salted hashes of email/IP, timestamps and consent version. Expired rows are deleted on signup traffic; if no more requests arrive, expired rows persist until next signup. Configure scheduled cleanup if a fixed retention deletion deadline is required.
 
-```html
-<script src="https://cdn.jsdelivr.net/gh/morofynn/eyequipment@COMMIT/eyequipment-b2b-site.js"></script>
-<script defer src="https://cdn.jsdelivr.net/gh/morofynn/eyequipment@COMMIT/eyequipment-assistant.js"></script>
-```
+## Release checklist
 
-Replace `COMMIT` with the tested full commit SHA. This keeps releases reproducible
-and prevents caches from mixing versions. After changing a script, commit and
-push it, test the new CDN URL, update the corresponding Webflow script URL, and
-publish Webflow. Previously pinned versions remain available for rollback.
+1. Connect the GitHub repository and branch in Webflow Cloud. Declare the DB binding and apply migrations.
+2. Add secrets directly to the Cloud environment and redeploy. Initially disabled.
+3. Build, unit tests, staging SMTP/TLS test, actual confirmation, welcome automation check, expired/reused-token checks.
+4. Switch the Webflow popup from window.open to same-origin fetch. Keep 30-second timing.
+5. Publish production only once the complete path is verified. No Shopify theme publication is needed.
 
-The assistant starts its newsletter invitation after 30 seconds of visit time,
-retains time across internal page navigation, and waits 24 hours after an offer
-or answer. Known subscribers, pending email confirmations and B2B customers are
-excluded. No chat/contact data is stored in this repository or sent to GitHub;
-GitHub/jsDelivr only deliver the public browser code. Storefront configuration
-is read from the existing page runtime. Never commit private tokens or local
-credentials.
-
-The repository was renamed from `morofynn/eyequipment-b2b` to
-`morofynn/eyequipment`; the B2B script filename and existing history are preserved.
+Current state: local server build and seven unit/protocol tests pass. Shopify GraphQL operations validated against 2026-10. No production Cloud deployment, credentials or live SMTP test yet. Frontend still uses the older staging window flow until the backend is operational.
