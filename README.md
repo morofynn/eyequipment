@@ -17,7 +17,7 @@ Do not put any secret in GitHub, PUBLIC_ variables, frontend JavaScript or logs.
 
 ## Flow
 
-POST api/signup accepts JSON `{email,consent:true,website:""}`. Same-origin only, durable per-IP/per-email rate limits and a honeypot. New profiles remain PENDING. Existing subscribed profiles are left unchanged; previous welcome tags are retained. Only a successful SMTP acceptance yields the acknowledgement. SMTP acceptance does not prove inbox delivery.
+POST api/signup accepts JSON `{email,consent:true,website:""}`. Same-origin only, durable global/per-email rate limits and a honeypot. The global limit is 30 signup attempts/hour. When the edge provides CF-Connecting-IP, an additional 8/hour per-IP limit applies; Webflow Cloud currently strips this header, so the global and per-email limits remain mandatory. Untrusted forwarded headers are not used. New profiles remain PENDING. Existing subscribed profiles are left unchanged; previous welcome tags are retained. Only a successful SMTP acceptance yields the acknowledgement. SMTP acceptance does not prove inbox delivery.
 
 Confirmation tokens contain 256 random bits, are stored only as hashes in SQLite and expire after 24 hours. The email link passes the token in the URL fragment, so it is not included in server access logs. GET never changes consent (mail scanner safe); the confirmation page requires an explicit click and POST. A lease prevents concurrent confirmations, and revoked subscriptions are not silently reactivated. Shopify is updated to SUBSCRIBED/CONFIRMED_OPT_IN only after verification. Existing Shopify welcome automation must be tested with this Admin API transition.
 

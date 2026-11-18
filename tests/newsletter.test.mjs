@@ -33,6 +33,16 @@ test('reused or expired confirmation cannot reach Shopify',async()=>{
 test('MIME safely encodes Unicode content and rejects header injection',()=>{
   const mail={to:'test@example.com',subject:'Bestätigen',text:'Text',html:'<p>Hallo</p>'};const message=mime({MAIL_FROM:'info@eyequipment.com'},mail);assert.match(message,/Subject: =\?UTF-8\?B\?/);assert.match(message,/multipart\/alternative/);assert.throws(()=>mime({MAIL_FROM:'info@eyequipment.com\r\nBcc: test@example.com'},mail));
 });
+test('missing proxy IP still enforces durable global and email limits before Shopify',async()=>{
+  const keys=[];const db={prepare(){return {args:[],bind(...args){this.args=args;return this;},async first(){keys.push(this.args[0]);return {count:1};},async run(){}};}};
+  const env={ENABLED:'true',PUBLIC_ORIGIN:'https://eyequipment.webflow.io',DB:db,SHOPIFY_ADMIN_TOKEN:'test',RATE_LIMIT_SECRET:'x'.repeat(32),SMTP_HOST:'w0123456.kasserver.com',SMTP_USERNAME:'test',SMTP_PASSWORD:'test',MAIL_FROM:'info@eyequipment.com'};
+  const previous=globalThis.fetch;
+  globalThis.fetch=async()=>Response.json({data:{customers:{nodes:[{id:'gid://shopify/Customer/1',defaultEmailAddress:{emailAddress:'test@example.com',marketingState:'SUBSCRIBED'}}]}}});
+  try {
+    const response=await signup(new Request(env.PUBLIC_ORIGIN+'/newsletter-service/api/signup',{method:'POST',headers:{Origin:env.PUBLIC_ORIGIN,'Content-Type':'application/json'},body:JSON.stringify({email:'test@example.com',consent:true})}),env);
+    assert.equal(response.status,200);assert.equal(keys[0],'global-signups');assert.match(keys[1],/^email:/);
+  } finally {globalThis.fetch=previous;}
+});
 test('SMTP uses TLS, waits for DATA acceptance, and fails on server rejection',async()=>{
   async function run(reject=false){const commands=[];let controller;const socket={opened:Promise.resolve(),readable:new ReadableStream({start(c){controller=c;c.enqueue(new TextEncoder().encode('220 ready\r\n'));}}),writable:new WritableStream({write(bytes){const text=new TextDecoder().decode(bytes);commands.push(text);const n=commands.length;const reply=n===1?'250-server\r\n250 AUTH LOGIN':n===2||n===3?'334 challenge':n===4?'235 ok':n===5?'250 ok':n===6?(reject?'550 denied':'250 ok'):n===7?'354 data':n===8?'250 accepted':null;if(reply)controller.enqueue(new TextEncoder().encode(reply+'\r\n'));}}),async close(){}};const promise=sendSmtp({SMTP_HOST:'w0123456.kasserver.com',SMTP_USERNAME:'user',SMTP_PASSWORD:'secret',MAIL_FROM:'info@eyequipment.com'},{to:'test@example.com',subject:'Hallo',text:'Text',html:'<p>Text</p>'},(address,options)=>{assert.equal(address.port,465);assert.equal(options.secureTransport,'on');return socket;});if(reject)await assert.rejects(promise,/SMTP_REJECTED/);else await promise;return commands;}
   const commands=await run();assert.equal(commands.at(-1),'QUIT\r\n');assert.match(commands[7],/Content-Type: multipart/);await run(true);

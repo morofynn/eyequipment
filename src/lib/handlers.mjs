@@ -11,10 +11,10 @@ export async function signup(request,env) {
   if (input.website) return json({message:acknowledgement});
   const db=env.DB, now=Math.floor(Date.now()/1000);
   try {
+    if (!await rateLimit(db,'global-signups',30,3600,now)) return json({error:'Bitte versuche es später erneut.'},429);
     const ip=request.headers.get('CF-Connecting-IP');
-    if (!ip) return json({error:'Anfrage nicht verfügbar.'},503);
-    const ipKey=await hash(env.RATE_LIMIT_SECRET+':'+ip), emailKey=await hash(env.RATE_LIMIT_SECRET+':'+email);
-    if (!await rateLimit(db,'ip:'+ipKey,8,3600,now)) return json({error:'Bitte versuche es später erneut.'},429);
+    const emailKey=await hash(env.RATE_LIMIT_SECRET+':'+email);
+    if (ip && !await rateLimit(db,'ip:'+await hash(env.RATE_LIMIT_SECRET+':'+ip),8,3600,now)) return json({error:'Bitte versuche es später erneut.'},429);
     if (!await rateLimit(db,'email:'+emailKey,1,900,now)) return json({message:acknowledgement});
     await db.prepare('DELETE FROM confirmations WHERE expires<?').bind(now).run();
     await db.prepare('DELETE FROM limits WHERE expires<?').bind(now).run();
@@ -31,7 +31,11 @@ export async function signup(request,env) {
       return json({error:'Die Bestätigungsmail konnte nicht versendet werden. Bitte versuche es später erneut.'},503);
     }
     return json({message:acknowledgement});
-  } catch { return json({error:'Die Anmeldung konnte nicht abgeschlossen werden. Bitte versuche es später erneut.'},503); }
+  } catch(error) {
+    const code=['SHOPIFY','SHOPIFY_AUTH'].includes(error?.message)?error.message:'STORAGE_OR_RUNTIME';
+    console.warn('newsletter_signup_failed',code);
+    return json({error:'Die Anmeldung konnte nicht abgeschlossen werden. Bitte versuche es später erneut.'},503);
+  }
 }
 export async function confirm(request,env) {
   if (!validOrigin(request,env)) return json({error:'Anfrage nicht erlaubt.'},403);
