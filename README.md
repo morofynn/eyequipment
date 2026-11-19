@@ -35,3 +35,10 @@ Publish staging first and exercise the native Webflow form against the actual
 endpoint. Submission acknowledgement does not prove confirmed consent or mail
 delivery. Check Shopify state after the real opt-in click, then separately check
 welcome workflow execution and actual mailbox arrival.
+
+## Existing storefront scripts
+
+The repository also keeps the existing B2B, language and assistant browser
+scripts. The assistant remains buildable with `npm run build:assistant`; its
+source and integration documentation are in `assistant/README.md`. Existing
+pinned CDN releases are unaffected by the newsletter service.

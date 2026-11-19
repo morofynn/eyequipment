@@ -4,3 +4,5 @@ dist/
 .wrangler/
 .env*
 dev.vars
+.DS_Store
+assistant/webflow-footer.html
