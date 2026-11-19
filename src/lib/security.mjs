@@ -1,4 +1,3 @@
-export const consentVersion = 'newsletter-2026-11-18';
 export const acknowledgement = 'Bitte prüfe deine E-Mails. Falls eine Bestätigung erforderlich ist, erhältst du einen Link zur Anmeldung.';
 export function json(body, status = 200) {
   return new Response(JSON.stringify(body), {status, headers:{'Content-Type':'application/json; charset=utf-8','Cache-Control':'no-store','Referrer-Policy':'no-referrer','X-Content-Type-Options':'nosniff'}});
@@ -14,8 +13,6 @@ export function normalizeEmail(value) {
 export async function hash(value) {
   return [...new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(value)))].map(x=>x.toString(16).padStart(2,'0')).join('');
 }
-export function newToken() { return [...crypto.getRandomValues(new Uint8Array(32))].map(x=>x.toString(16).padStart(2,'0')).join(''); }
-export function validToken(token) { return typeof token === 'string' && /^[0-9a-f]{64}$/.test(token); }
 export async function rateLimit(db, key, maximum, seconds, now) {
   const row = await db.prepare('INSERT INTO limits(key,count,expires) VALUES (?,1,?) ON CONFLICT(key) DO UPDATE SET count=CASE WHEN limits.expires<=? THEN 1 ELSE limits.count+1 END, expires=CASE WHEN limits.expires<=? THEN excluded.expires ELSE limits.expires END RETURNING count').bind(key, now+seconds, now, now).first();
   return row.count <= maximum;
@@ -27,5 +24,5 @@ export async function body(request) {
   return JSON.parse(text);
 }
 export function ready(env) {
-  return env.ENABLED === 'true' && env.PUBLIC_ORIGIN?.startsWith('https://') && env.DB && (env.SHOPIFY_ADMIN_TOKEN || (env.SHOPIFY_CLIENT_ID && env.SHOPIFY_CLIENT_SECRET)) && env.RATE_LIMIT_SECRET?.length >= 32 && /^[a-z0-9-]+\.kasserver\.com$/i.test(env.SMTP_HOST||'') && env.SMTP_USERNAME && env.SMTP_PASSWORD && normalizeEmail(env.MAIL_FROM);
+  return env.ENABLED === 'true' && env.PUBLIC_ORIGIN?.startsWith('https://') && env.DB && env.SHOPIFY_STOREFRONT_TOKEN && env.RATE_LIMIT_SECRET?.length >= 32;
 }

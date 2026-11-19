@@ -1,4 +1,0 @@
-query NewsletterCustomer($query:String!) { customers(first:2,query:$query) { nodes { id defaultEmailAddress { emailAddress marketingState } } } }
-mutation NewsletterCreate($input:CustomerInput!) { customerCreate(input:$input) { customer { id } userErrors { message } } }
-mutation NewsletterConsent($input:CustomerEmailMarketingConsentUpdateInput!) { customerEmailMarketingConsentUpdate(input:$input) { customer { id } userErrors { message } } }
-query NewsletterConfirmation($id:ID!) { customer(id:$id) { id defaultEmailAddress { marketingState } } }

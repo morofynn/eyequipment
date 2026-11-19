@@ -1,34 +1,37 @@
-# eyequipment Newsletter – Webflow Cloud
+# eyequipment newsletter service
 
-Separate GitHub branch `newsletter-cloud`; no changes to the site's main branch. Mount at `/newsletter-service` on the existing eyequipment Webflow site. Initial environment uses only `https://eyequipment.webflow.io` as PUBLIC_ORIGIN. Do not enable production before a complete confirmation and welcome-discount test.
+The Webflow popup opens after 30 seconds and submits explicit email newsletter
+consent to `/newsletter-service/api/signup` on the same origin. The server calls
+Shopify Storefront `customerEmailMarketingSubscribe(email:)`. Shopify creates
+missing customer records, sends its original marketing opt-in notification and
+owns the confirmation link. The existing Shopify welcome workflow sends the
+first-purchase discount after confirmation; delivery can be delayed.
 
-## Server variables
+There is no SMTP transport, ALL-INKL integration, own confirmation page, Admin
+customer creation, Admin consent update, popup window or theme preview fallback.
+The mutation is currently only in `unstable`; it has been tested in this store
+for existing and new customers. Fail closed if Shopify changes it.
 
-- ENABLED: `false` until configured and tested.
-- PUBLIC_ORIGIN: `https://eyequipment.webflow.io` for staging; production later uses its canonical origin.
-- MOUNT_PATH: `/newsletter-service`
-- SHOPIFY_CLIENT_ID and SHOPIFY_CLIENT_SECRET (secret): credentials of the separate Newsletter Cloud app, installed in the same Shopify organization/store with read_customers and write_customers. The server exchanges them for a 24-hour access token and renews it as needed. Alternatively an existing SHOPIFY_ADMIN_TOKEN is supported. Never use connector credentials.
-- RATE_LIMIT_SECRET (secret): independently generated random value, at least 32 characters.
-- SMTP_HOST: the actual ALL-INKL KAS server, such as the server shown in the mailbox settings; never guess the account-specific hostname.
-- SMTP_USERNAME, SMTP_PASSWORD (secrets): ALL-INKL mailbox SMTP login. No KAS account password.
-- MAIL_FROM: `info@eyequipment.com`, authorized for that mailbox.
+## Webflow Cloud configuration
 
-Do not put any secret in GitHub, PUBLIC_ variables, frontend JavaScript or logs. ALL-INKL delivery uses TLS on port 465 through the Workers TCP socket API. This must be tested on Webflow Cloud; local Node cannot import cloudflare:sockets. No additional mail provider.
+- `ENABLED=true`
+- `PUBLIC_ORIGIN`: exact HTTPS origin serving popup and endpoint
+- `SHOPIFY_STOREFRONT_TOKEN`: existing Storefront access with
+  `unauthenticated_write_customers`; Cloud configuration only, never Git
+- `RATE_LIMIT_SECRET`: random secret of at least 32 characters
+- D1 binding `DB`: durable global, per-email and optional trusted IP limits
+- Mount `/newsletter-service`
 
-## Flow
+Remove obsolete SMTP_HOST, SMTP_USERNAME, SMTP_PASSWORD, MAIL_FROM,
+SHOPIFY_CLIENT_ID, SHOPIFY_CLIENT_SECRET and SHOPIFY_ADMIN_TOKEN variables.
+The service no longer reads them. Historical migrations remain compatible with
+existing databases; no new confirmation records are generated.
 
-POST api/signup accepts JSON `{email,consent:true,website:""}`. Same-origin only, durable global/per-email rate limits and a honeypot. The global limit is 30 signup attempts/hour. When the edge provides CF-Connecting-IP, an additional 8/hour per-IP limit applies; Webflow Cloud currently strips this header, so the global and per-email limits remain mandatory. Untrusted forwarded headers are not used. New profiles remain PENDING. Existing subscribed profiles are left unchanged; previous welcome tags are retained. Only a successful SMTP acceptance yields the acknowledgement. SMTP acceptance does not prove inbox delivery.
+## Validation
 
-Confirmation tokens contain 256 random bits, are stored only as hashes in SQLite and expire after 24 hours. The email link passes the token in the URL fragment, so it is not included in server access logs. GET never changes consent (mail scanner safe); the confirmation page requires an explicit click and POST. A lease prevents concurrent confirmations, and revoked subscriptions are not silently reactivated. Shopify is updated to SUBSCRIBED/CONFIRMED_OPT_IN only after verification. Existing Shopify welcome automation must be tested with this Admin API transition.
-
-The private data retained temporarily are the Shopify customer ID and salted hashes of email/IP, timestamps and consent version. Expired rows are deleted on signup traffic; if no more requests arrive, expired rows persist until next signup. Configure scheduled cleanup if a fixed retention deletion deadline is required.
-
-## Release checklist
-
-1. Connect the GitHub repository and branch in Webflow Cloud. Declare the DB binding and apply migrations.
-2. Add secrets directly to the Cloud environment and redeploy. Initially disabled.
-3. Build, unit tests, staging SMTP/TLS test, actual confirmation, welcome automation check, expired/reused-token checks.
-4. Switch the Webflow popup from window.open to same-origin fetch. Keep 30-second timing.
-5. Publish production only once the complete path is verified. No Shopify theme publication is needed.
-
-Current state: local server build and nine unit/protocol/frontend tests pass. Shopify GraphQL operations validated against 2026-10. No production Cloud deployment, credentials or live SMTP test yet. The new same-origin popup runtime is published to Webflow staging and displays a real unavailable error while the backend is disabled. No production website publication yet.
+Run `npm test` and `npm run build`. Tests cover the Storefront contract, errors,
+retry, origin validation, limits, inline submission and the 30-second delay.
+Publish staging first and exercise the native Webflow form against the actual
+endpoint. Submission acknowledgement does not prove confirmed consent or mail
+delivery. Check Shopify state after the real opt-in click, then separately check
+welcome workflow execution and actual mailbox arrival.
