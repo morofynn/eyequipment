@@ -1,45 +1,37 @@
-# eyequipment website scripts
+# eyequipment newsletter service
 
-Public browser scripts for the eyequipment Webflow / Storesynk storefront.
+The Webflow popup opens after 30 seconds and submits explicit email newsletter
+consent to `/newsletter-service/api/signup` on the same origin. The server calls
+Shopify Storefront `customerEmailMarketingSubscribe(email:)`. Shopify creates
+missing customer records, sends its original marketing opt-in notification and
+owns the confirmation link. The existing Shopify welcome workflow sends the
+first-purchase discount after confirmation; delivery can be delayed.
 
-- `eyequipment-b2b-site.js`: existing B2B storefront integration.
-- `eyequipment-assistant.js`: generated assistant bundle, including styles.
-- `assistant/assistant.js` and `assistant/assistant.css`: editable assistant sources.
+There is no SMTP transport, ALL-INKL integration, own confirmation page, Admin
+customer creation, Admin consent update, popup window or theme preview fallback.
+The mutation is currently only in `unstable`; it has been tested in this store
+for existing and new customers. Fail closed if Shopify changes it.
 
-## Build the assistant
+## Webflow Cloud configuration
 
-Use Node.js and install the pinned build dependency:
+- `ENABLED=true`
+- `PUBLIC_ORIGIN`: exact HTTPS origin serving popup and endpoint
+- `SHOPIFY_STOREFRONT_TOKEN`: existing Storefront access with
+  `unauthenticated_write_customers`; Cloud configuration only, never Git
+- `RATE_LIMIT_SECRET`: random secret of at least 32 characters
+- D1 binding `DB`: durable global, per-email and optional trusted IP limits
+- Mount `/newsletter-service`
 
-```sh
-npm install
-npm run build:assistant
-```
+Remove obsolete SMTP_HOST, SMTP_USERNAME, SMTP_PASSWORD, MAIL_FROM,
+SHOPIFY_CLIENT_ID, SHOPIFY_CLIENT_SECRET and SHOPIFY_ADMIN_TOKEN variables.
+The service no longer reads them. Historical migrations remain compatible with
+existing databases; no new confirmation records are generated.
 
-Alternatively pass a local Terser UMD bundle path to `node assistant/build.cjs`.
-The build writes `eyequipment-assistant.js` in the repository root and an inline
-preview/fallback in `assistant/webflow-footer.html`.
+## Validation
 
-## Webflow integration
-
-Load the B2B file in the head and the assistant file in the footer using jsDelivr:
-
-```html
-<script src="https://cdn.jsdelivr.net/gh/morofynn/eyequipment@COMMIT/eyequipment-b2b-site.js"></script>
-<script defer src="https://cdn.jsdelivr.net/gh/morofynn/eyequipment@COMMIT/eyequipment-assistant.js"></script>
-```
-
-Replace `COMMIT` with the tested full commit SHA. This keeps releases reproducible
-and prevents caches from mixing versions. After changing a script, commit and
-push it, test the new CDN URL, update the corresponding Webflow script URL, and
-publish Webflow. Previously pinned versions remain available for rollback.
-
-The assistant starts its newsletter invitation after 30 seconds of visit time,
-retains time across internal page navigation, and waits 24 hours after an offer
-or answer. Known subscribers, pending email confirmations and B2B customers are
-excluded. No chat/contact data is stored in this repository or sent to GitHub;
-GitHub/jsDelivr only deliver the public browser code. Storefront configuration
-is read from the existing page runtime. Never commit private tokens or local
-credentials.
-
-The repository was renamed from `morofynn/eyequipment-b2b` to
-`morofynn/eyequipment`; the B2B script filename and existing history are preserved.
+Run `npm test` and `npm run build`. Tests cover the Storefront contract, errors,
+retry, origin validation, limits, inline submission and the 30-second delay.
+Publish staging first and exercise the native Webflow form against the actual
+endpoint. Submission acknowledgement does not prove confirmed consent or mail
+delivery. Check Shopify state after the real opt-in click, then separately check
+welcome workflow execution and actual mailbox arrival.
