@@ -1,0 +1,82 @@
+(function(){'use strict';
+const E=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const money=c=>new Intl.NumberFormat('de-DE',{style:'currency',currency:'EUR'}).format(c/100);
+const logo='https://cdn.prod.website-files.com/6ab03675c10ac3c44d6b415b/6ab0be22937a20a68153dd2b_eyequipment.svg';
+let activeReceipt=null;const loads={};
+function library(url,global){if(window[global])return Promise.resolve(window[global]);return loads[global] ||= new Promise((resolve,reject)=>{const s=document.createElement('script');s.src=url;s.onload=()=>resolve(window[global]);s.onerror=()=>{delete loads[global];reject(Error('Bibliothek nicht erreichbar'));};document.head.append(s);});}
+async function encode(data){const bytes=new TextEncoder().encode(JSON.stringify(data));if(!window.CompressionStream)throw Error('Dieser Browser unterstützt den digitalen Beleg noch nicht.');const compressed=new Uint8Array(await new Response(new Blob([bytes]).stream().pipeThrough(new CompressionStream('deflate'))).arrayBuffer());return btoa(String.fromCharCode(...compressed)).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'');}
+async function decode(value){if(value.length>24000||!/^[A-Za-z0-9_-]+$/.test(value))throw Error('Ungültiger Beleg');const encoded=value.replace(/-/g,'+').replace(/_/g,'/');const bytes=Uint8Array.from(atob(encoded),c=>c.charCodeAt(0));const reader=new Blob([bytes]).stream().pipeThrough(new DecompressionStream('deflate')).getReader();const chunks=[];let size=0;while(true){const {value,done}=await reader.read();if(done)break;size+=value.length;if(size>120000){reader.cancel();throw Error('Beleg zu groß');}chunks.push(value);}const data=JSON.parse(await new Blob(chunks).text());if(data.v!==1||typeof data.r!=='string'||data.r.length>60||!Array.isArray(data.l)||!data.l.length||data.l.length>100||!data.l.every(l=>Array.isArray(l)&&typeof l[0]==='string'&&l[0].length<=200&&l.slice(1).every(n=>Number.isSafeInteger(n)&&n>=0&&n<1000000000)))throw Error('Ungültige Bestellpositionen');return data;}
+async function prepare(reference,t,customer,dealer){const data={v:1,r:reference,d:new Date().toISOString(),l:t.lines.map(l=>[l.title,l.quantity,l.unit,l.discount,l.total]),s:t.subtotal,o:t.discount,t:t.total,...(typeof KioskCore!=='undefined'?KioskCore.shipping(t.total):{})};const base=location.origin+location.pathname;const mobile=base+'#beleg='+await encode(data);const team=base+'#beleg='+await encode({...data,c:customer,h:dealer});return {data,mobile,team};}
+async function qr(url,target){const qrcode=await library('https://cdn.jsdelivr.net/npm/qrcode-generator@2.0.4/dist/qrcode.js','qrcode');const q=qrcode(0,'M');q.addData(url);q.make();if(!target.isConnected)return;target.innerHTML=q.createSvgTag({cellSize:4,margin:16,scalable:true});target.setAttribute('aria-label','QR-Code für deine Bestellübersicht');}
+function address(c,prefix=''){if(!c)return '';return prefix?`${E(c.deliveryCompany)}<br>${E(c.deliveryStreet)}<br>${E(c.deliveryZip)} ${E(c.deliveryCity)}<br>${E(c.deliveryCountry)}`:`${E(c.company)}<br>${E(c.firstName)} ${E(c.lastName)}<br>${E(c.street)}<br>${E(c.zip)} ${E(c.city)}<br>${E(c.country)}<br>${E(c.email)}<br>${E(c.phone)}`;}
+function html(data){return `<article class="r-sheet"><header class="r-header"><img src="${logo}" alt="eyequipment"><span>MORO KIOSK<br>opti 2027</span></header><div class="r-intro"><p class="r-kicker">${data.r.startsWith("TEST-")?"TESTBELEG":"DEINE MESSEBESTELLUNG"}</p><h1>Gute Wahl.<br>Zum Mitnehmen.</h1><p class="r-reference">${E(data.r)} · ${E(new Date(data.d).toLocaleDateString('de-DE'))}</p></div>${data.c?`<div class="r-addresses"><section><h2>Rechnung & Kontakt</h2><p>${address(data.c)}</p></section><section><h2>Lieferung</h2><p>${data.c.separate?address(data.c,'delivery'):'Wie Rechnungsanschrift'}</p><p>${data.h==='existing'?'Bestehender Händler':'Neuer Händler'}${data.c.vatId?'<br>USt-IdNr.: '+E(data.c.vatId):''}</p></section></div>`:''}<div class="r-table-wrap"><table class="r-table"><thead><tr><th>Produkt</th><th>Stück</th><th>Einzel netto</th><th>Zeile netto*</th></tr></thead><tbody>${data.l.map(l=>`<tr><td>${E(l[0])}</td><td>${l[1]}</td><td>${money(l[2])}</td><td>${money(l[4])}</td></tr>`).join('')}</tbody></table></div><div class="r-totals"><p><span>Händlerpreis netto</span><strong>${money(data.s)}</strong></p><p class="r-discount"><span>15% Messerabatt</span><strong>− ${money(data.o)}</strong></p><p class="r-total"><span>Warenwert netto</span><strong>${money(data.t)}</strong></p>${data.delivery?`<p><span>Versand netto</span><strong>${money(data.delivery)}</strong></p><p><span>19 % USt.</span><strong>${money(data.tax)}</strong></p><p class="r-total"><span>Gesamt inkl. USt.</span><strong>${money(data.gross)}</strong></p>`:''}</div><p class="r-small">* Nach 15% Messerabatt.</p><div class="r-payment"><strong>Kauf auf Rechnung.</strong><p>${data.r.startsWith("TEST-")?"Dieser Beleg dient zum Testen. Es wurde keine Bestellung gesendet.":"Die Auftragsbestätigung und Rechnung folgen durch eyequipment. Dieser Beleg ist deine Bestellübersicht und keine Rechnung."}</p></div>${data.c?.notes?`<section class="r-notes"><h2>Anmerkungen</h2><p>${E(data.c.notes)}</p></section>`:''}<footer class="r-foot">MORO × eyequipment · opti 2027<br>Lieferung nach Verfügbarkeit. Bitte nenne bei Rückfragen deine Bestellreferenz.</footer></article>`;}
+async function render(root){const token=location.hash.slice(7);document.body.classList.add('receipt-mode');root.innerHTML='<div class="r-loading">Dein Bestellbeleg wird geöffnet …</div>';try{activeReceipt=await decode(token);root.innerHTML=`<div class="r-actions"><button id="r-pdf">PDF herunterladen ↓</button></div>${html(activeReceipt)}<div id="r-status" role="status"></div>`;document.getElementById('r-pdf').addEventListener('click',()=>download(activeReceipt));}catch{root.innerHTML='<div class="r-loading"><h1>Dieser Beleg lässt sich nicht öffnen.</h1><p>Bitte scanne den QR-Code erneut oder wende dich mit deiner Bestellreferenz an eyequipment.</p></div>';}}
+async function makePdf(data){const {PDFDocument,StandardFonts,rgb}=await library('https://cdn.jsdelivr.net/npm/pdf-lib@1.17.1/dist/pdf-lib.min.js','PDFLib');const pdf=await PDFDocument.create();const regular=await pdf.embedFont(StandardFonts.Helvetica),bold=await pdf.embedFont(StandardFonts.HelveticaBold),serif=await pdf.embedFont(StandardFonts.TimesRoman);const ink=rgb(.10,.11,.09),muted=rgb(.39,.42,.36),mint=rgb(.87,.93,.88);let page,y,pageNo=0;const clean=s=>String(s??'').replace(/[^\x20-\x7E\xA0-\xFF€–—‘’“”•]/g,'?');
+function text(value,x,yy,size=10,font=regular,color=ink){page.drawText(clean(value),{x,y:yy,size,font,color});}
+const logoPaths=["m106.62,109.97l-78.8-.42c.85,4.11,2.34,7.57,4.03,10.9,6.1,12.14,19.84,32.49,43.21,32.49,11.19,0,21.29-9.49,25.47-18.87l4.23,3.25c-2.88,4.61-5.68,8.64-8.99,12.1-10.2,10.66-23.72,16.07-40.2,16.07s-29.77-5.4-40.19-16.08C5.18,138.52,0,124.74,0,108.49s5.03-28.94,15.38-40.47c12.71-14.17,28.64-16.29,37-16.29,17.64,0,31.21,5.13,40.5,15.23,15.69,17.05,13.75,42.74,13.73,43Zm-26.7-4.15c.45-33.94-16.24-49.21-31.73-49.21-3.85,0-7.58.9-11.09,2.66-10.66,5.36-17.72,24.12-11.09,46.23l53.92.32Z","m194.32,53.94h18.71l-.12.61c-.5,0-6.55,4.91-9.83,13.83-5.76,15.67-45.47,112.56-45.47,112.56-2.35,5.91-9.53,29.48-29.44,29.48-7.78,0-14.44-3.3-17.28-7.3l7.76-10.02c20.12,17.33,31.25-4.39,34.33-11.82,1.41-3.42,3.39-7.97,5.9-13.96,0,0,1.15-2.79,2.99-7.25-3.53-8.72-29.77-73.34-31.02-75.44C108.8,25.93,95.77,10.03,87.04,14.12c-1.19.56-2.32,1.35-3.53,2.48l-1.5-3.2s8.52-6.77,16.58-10.53c9.37-4.38,25.02-5.89,35.16,11.77,2.82,4.92,38.69,97.73,43.17,108.8,9.43-22.98,19.38-47.36,21.18-52.21,4.34-11.66-3.79-16.77-3.79-16.77v-.51Z","m319.09,109.97l-78.8-.42c.85,4.11,2.34,7.57,4.03,10.9,6.1,12.14,19.84,32.49,43.21,32.49,11.19,0,21.29-9.49,25.47-18.87l4.23,3.25c-2.88,4.61-5.68,8.64-8.99,12.1-10.2,10.66-23.72,16.07-40.2,16.07s-29.77-5.4-40.19-16.08c-10.19-10.89-15.37-24.66-15.37-40.91s5.03-28.94,15.38-40.47c12.71-14.17,28.64-16.29,37-16.29,17.64,0,31.21,5.13,40.5,15.23,15.69,17.05,13.75,42.74,13.73,43Zm-26.7-4.15c.45-33.94-16.24-49.21-31.73-49.21-3.85,0-7.58.9-11.09,2.66-10.66,5.36-17.72,24.12-11.09,46.23l53.92.32Z","m445,66.45v131.19c0,9.15,4.19,10.61,4.19,10.61v2.18c-4.7,0-31.44,1.57-31.44-18.81v-40.69c-8.57,10.28-20.54,14.16-31.85,14.16-14.09,0-46.87-5.56-46.87-57.14,0-36.51,21.63-55.03,53.18-55.03,13.02,0,21.25,5.74,26.3,14.39,4.19-14.88,26.43-13.65,30.69-13.65v2.18s-4.19,1.46-4.2,10.62Zm-27.61,18.08c0-13.43-7.87-27.88-25.17-27.88-20.96,0-25.16,19.63-25.16,51.3,0,35.56,8.4,51.43,27.25,51.43,12.94,0,23.07-12.14,23.07-27.62v-47.23Z","m565.47,161.92l-.14,2.09s-27.56,4.05-31.38-16.56c-7.29,10.85-19.84,18.99-30.6,18.99-13.16,0-35.43-7.31-35.43-34.69l.19-41.75c-.03-12.42-1.44-20.7-4.21-24.58l-.02-2.56c.38.02.77.02,1.15.02,14.53,0,26.35-8.83,26.48-8.92h3.34s0,80.42,0,80.42c0,16.54,4.89,24.93,14.51,24.93,15.37,0,24.7-26.5,24.7-38.16v-32.39c-.1-11.73-1.52-19.57-4.2-23.33v-2.56c.38.02.76.02,1.14.02,14.53,0,26.59-8.84,26.71-8.93h3.29v97.31c0,4.53.78,9.26,4.47,10.65Z","m615.67,162.13v2.18c-4.7,0-31.44,1.57-31.44-18.81l.03-53.87c0-5.34.03-20.28-4.21-26.2l-.02-2.56c.38.02.77.02,1.15.02,14.54,0,27.15-8.83,27.27-8.92l3.01-.03v97.59c0,9.15,4.2,10.61,4.2,10.61Zm-32.01-136.2c0-7.68,6.23-13.91,13.91-13.91s13.91,6.23,13.91,13.91-6.23,13.91-13.91,13.91-13.91-6.23-13.91-13.91Z","m740.91,108.99c0,51.58-32.78,57.15-46.87,57.15-11.32,0-23.3-3.89-31.88-14.2v45.72c0,9.15,4.18,10.61,4.18,10.61v2.18c-4.7,0-31.44,1.57-31.44-18.81l.04-124.15c0-9.15-4.19-10.61-4.19-10.61v-2.18c4.26,0,26.5-1.24,30.69,13.64,5.05-8.65,16.62-14.39,29.64-14.39,31.55,0,49.84,18.52,49.83,55.05Zm-28-.02c0-31.67-4.21-51.3-25.17-51.3-17.29,0-25.17,14.45-25.17,27.88v47.23c0,15.48,10.14,27.62,23.07,27.62,18.85,0,27.25-15.86,27.26-51.43Z","m920.56,161.85l-.14,2.09s-31.85,4.71-31.85-21.54l.03-58.48c0-16.54-4.33-24.93-13.96-24.93-11.68,0-19.86,15.31-23.12,27.78v64.43c0,4.53.78,9.26,4.48,10.64l-.14,2.09s-31.85,4.7-31.85-21.54l.03-58.49c0-16.54-4.33-24.93-13.96-24.93-12.17,0-20.53,16.62-23.49,29.34v63.2c0,9.15,4.19,10.61,4.19,10.61v2.18c-4.71,0-31.44,1.57-31.44-18.81l.03-53.85c0-5.34.03-20.28-4.21-26.21l-.02-2.56c.38.02.77.02,1.15.02,14.54,0,27.15-8.83,27.27-8.92l3.01-.03v16.26c7.19-10.8,18.73-18.36,29.52-18.36s26.77,4.69,32.92,20.5c7.21-11.33,20.56-20.5,31.64-20.5,13.16,0,35.42,7.31,35.42,34.69v64.66c0,4.53.78,9.26,4.52,10.65Z","m1039.95,109.97l-78.8-.42c.85,4.11,2.34,7.57,4.03,10.9,6.1,12.14,19.84,32.49,43.21,32.49,11.19,0,21.29-9.49,25.47-18.87l4.23,3.25c-2.88,4.61-5.68,8.64-8.99,12.1-10.2,10.66-23.72,16.07-40.2,16.07s-29.77-5.4-40.19-16.08c-10.19-10.89-15.37-24.66-15.37-40.91s5.03-28.94,15.38-40.47c12.71-14.17,28.64-16.29,37-16.29,17.64,0,31.21,5.13,40.5,15.23,15.69,17.05,13.75,42.74,13.73,43Zm-26.7-4.15c.45-33.94-16.24-49.21-31.73-49.21-3.85,0-7.58.9-11.09,2.66-10.66,5.36-17.72,24.12-11.09,46.23l53.92.32Z","m1159.63,161.84l-.14,2.09s-31.85,4.7-31.85-21.54l.03-58.49c0-16.54-7.02-24.93-16.65-24.93-11.7,0-21.96,15.36-26.21,27.83v64.7c0,9.15,4.19,10.61,4.19,10.61v2.18c-4.71,0-31.44,1.57-31.44-18.81l.03-53.85c0-5.34.03-20.28-4.21-26.21l-.02-2.56c.38.02.77.02,1.15.02,14.54,0,27.15-8.83,27.27-8.92l3.01-.03v15.22c8.11-10.24,24.48-17.32,34.92-17.32,13.16,0,35.42,7.31,35.42,34.69v64.66c0,4.53.78,9.26,4.5,10.64Z","m1223.31,158.2v3.54s-7.21,2.6-16.1,2.6c-10.34,0-29.6-.43-29.6-32.16V58.02h-12.21v-4.06c.13,0,4.03,0,4.15,0,15.07,0,31.99-19.03,31.99-26.98h3.12s0,26.97,0,26.97h16.07v4.06h-16.07l-.13,76c0,16.54,4.89,24.93,14.52,24.93,1.32,0,2.67-.24,4.25-.75Z"];
+function start(){page=pdf.addPage();page.setSize(595.28,841.89);pageNo++;y=745;for(const path of logoPaths)page.drawSvgPath(path,{x:42,y:809,scale:.143,color:ink});text('MORO KIOSK · opti 2027',378,791,9,bold);page.drawLine({start:{x:42,y:770},end:{x:553,y:770},thickness:.7,color:rgb(.8,.83,.78)});text('MORO GmbH · Eupener Straße 124 · 50933 Köln · info@eyequipment.com · +49 221 292 40 500',42,42,8,regular,muted);text('GF Marc Rogmans · Amtsgericht Köln HRB 101363 · USt-IdNr. DE 329 168 399',42,28,8,regular,muted);text('Seite '+pageNo,506,28,8,regular,muted);}
+const cream=rgb(.966,.958,.925), lineColor=rgb(.86,.89,.84), green=rgb(.22,.38,.29);
+function panel(x,bottom,width,height,r,color){
+  const w=width,h=height;
+  const path=`M ${r} 0 H ${w-r} Q ${w} 0 ${w} ${r} V ${h-r} Q ${w} ${h} ${w-r} ${h} H ${r} Q 0 ${h} 0 ${h-r} V ${r} Q 0 0 ${r} 0 Z`;
+  page.drawSvgPath(path,{x,y:bottom+height,color});
+}
+function right(value,edge,yy,size=10,font=regular,color=ink){
+  text(value,edge-font.widthOfTextAtSize(clean(value),size),yy,size,font,color);
+}
+function ensure(height){if(y-height<65)start();}
+function wrap(value,width,size=10,font=regular){const words=clean(value).split(/\s+/),lines=[];let line='';for(const word of words){const next=line?line+' '+word:word;if(font.widthOfTextAtSize(next,size)>width&&line){lines.push(line);line=word;}else line=next;}if(line)lines.push(line);return lines;}
+function para(value,size=10,color=muted){for(const line of wrap(value,510,size)){ensure(16);text(line,42,y,size,regular,color);y-=15;}y-=6;}
+start();
+panel(42,594,511,160,18,cream);
+panel(62,716,153,23,11,mint);
+text(data.r.startsWith('TEST-')?'TESTBELEG':'DEINE MESSEBESTELLUNG',73,724,9,bold,green);
+text('Gute Wahl.',62,675,36,serif);
+text('Zum Mitnehmen.',62,637,36,serif);
+text(data.r+'  ·  '+new Date(data.d).toLocaleDateString('de-DE'),62,610,10,regular,muted);
+y=568;
+if(data.c){const c=data.c;para('BETRIEB & RECHNUNGSANSCHRIFT',10,ink);para([c.company,c.firstName+' '+c.lastName,c.street,c.zip+' '+c.city,c.country,c.email,c.phone,c.vatId?'USt-IdNr.: '+c.vatId:''].filter(Boolean).join(' · '));if(c.separate){para('LIEFERANSCHRIFT',10,ink);para([c.deliveryCompany,c.deliveryStreet,c.deliveryZip+' '+c.deliveryCity,c.deliveryCountry].join(' · '));}y-=12;}
+function tableHead(){
+  ensure(48);
+  panel(42,y-10,511,29,8,mint);
+  text('PRODUKT',55,y,9,bold,green);
+  right('STÜCK',341,y,9,bold,green);
+  right('EINZEL NETTO',442,y,9,bold,green);
+  right('ZEILE NETTO*',540,y,9,bold,green);
+  y-=32;
+}
+tableHead();
+for(const item of data.l){
+  const title=wrap(item[0],224,11);
+  const height=Math.max(32,title.length*15+13);
+  if(y-height<65){start();tableHead();}
+  title.forEach((part,index)=>text(part,55,y-index*15,11,bold));
+  right(String(item[1]),341,y);
+  right(money(item[2]),442,y,10,regular,muted);
+  right(money(item[4]),540,y,10,bold);
+  y-=height;
+  page.drawLine({start:{x:42,y:y+15},end:{x:553,y:y+15},thickness:.55,color:lineColor});
+}
+const tally=[
+  ['Händlerpreis netto',data.s],
+  ['15 % Messerabatt',-data.o],
+  ...(data.delivery?[['Warenwert netto',data.t],['Versand netto',data.delivery],['19 % USt.',data.tax]]:[])
+];
+ensure(tally.length*19+144);
+const totalsHeight=tally.length*19+63;
+panel(42,y-totalsHeight+2,511,totalsHeight,14,cream);
+y-=21;
+for(const [label,value] of tally){
+  const color=value<0?green:ink;
+  text(label,61,y,11,regular,color);
+  right(money(value),533,y,11,bold,color);
+  y-=19;
+}
+panel(52,y-26,491,37,10,ink);
+text(data.delivery?'Gesamt inkl. USt.':'Warenwert netto',64,y-11,12,bold,rgb(1,1,1));
+right(money(data.gross??data.t),530,y-13,18,bold,rgb(1,1,1));
+y-=53;
+para(data.delivery?'* Nach 15% Messerabatt.':'* Nach 15% Messerabatt. Zuzüglich gesetzlicher Umsatzsteuer und Versand gemäß Händlerkonditionen.',9);para(data.r.startsWith('TEST-')?'Testbeleg. Es wurde keine Bestellung gesendet.':'Kauf auf Rechnung. Dieser Beleg ist deine Bestellübersicht, keine Rechnung. Auftragsbestätigung und Rechnung folgen durch eyequipment. Lieferung nach Verfügbarkeit.',9);if(data.c?.notes){ensure(45);y-=12;para('ANMERKUNGEN',10,ink);para(data.c.notes);}pdf.setTitle('MORO Kiosk – '+data.r);pdf.setAuthor('eyequipment');return pdf.save();}
+async function download(data){const button=document.getElementById('r-pdf');if(button){button.disabled=true;button.textContent='PDF wird erstellt …';}try{const bytes=await makePdf(data);const url=URL.createObjectURL(new Blob([bytes],{type:'application/pdf'}));const a=document.createElement('a');a.href=url;a.download=data.r+'.pdf';document.body.append(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),30000);}catch{const el=document.getElementById('r-status');if(el)el.textContent='PDF konnte nicht geladen werden. Bitte versuche es erneut.';}finally{if(button){button.disabled=false;button.textContent='PDF herunterladen ↓';}}}
+window.KioskReceipt={prepare,qr,render,makePdf,download,html,decode};
+})();
