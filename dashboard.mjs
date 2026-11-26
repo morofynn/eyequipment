@@ -129,7 +129,9 @@ return async (req,res) => {
       }
       if (url.searchParams.get('view')==='customer') { delete data.c; delete data.h; }
       const pdf = await receipt.makePdf(data);
-      res.writeHead(200,{'Content-Type':'application/pdf','Content-Disposition':'attachment; filename="MORO-Bestellbeleg.pdf"'});
+      const reference = String(f.Referenz ?? '').replace(/[^A-Za-z0-9#_-]/g,'').slice(0,64);
+      const filename = reference ? `${reference}.pdf` : 'MORO-Bestellbeleg.pdf';
+      res.writeHead(200,{'Content-Type':'application/pdf','Content-Disposition':`attachment; filename="${filename}"`});
       return res.end(Buffer.from(pdf));
     }
     return body(200,detail(order));
