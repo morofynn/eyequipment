@@ -100,7 +100,7 @@ return async (req,res) => {
   res.setHeader('Referrer-Policy','no-referrer');
   res.setHeader('Content-Security-Policy',"default-src 'none'; style-src 'unsafe-inline'; img-src https://cdn.prod.website-files.com; frame-ancestors https://moro-kiosk.webflow.io; form-action 'self'; base-uri 'none'");
   const body = (status, html) => { res.writeHead(status,{'Content-Type':'text/html; charset=utf-8'}); res.end(html); };
-  if (!WEBFLOW_TOKEN || !MORO_ADMIN_PASSWORD || MORO_ADMIN_PASSWORD.length<24) {
+  if (!WEBFLOW_TOKEN || !MORO_ADMIN_PASSWORD || MORO_ADMIN_PASSWORD.length<5) {
     console.warn('MORO dashboard configuration:', !WEBFLOW_TOKEN ? 'Webflow token missing' : !MORO_ADMIN_PASSWORD ? 'Admin password missing' : 'Admin password too short');
     return body(503,'Das Dashboard wird eingerichtet.');
   }
